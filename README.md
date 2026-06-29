@@ -31,3 +31,9 @@ jobs:
       - run: pytest tests/test_[Name of Module/Script].py 
       
 ``` 
+## Updating Requirements
+Requirements are separated by module/concern to update them we use pipreqs in the folder for the module and it adds all the imports to the requirements .txt file 
+
+```powershell
+pipreqs [foldername]/ --savepath requirements/[foldername].txt
+```

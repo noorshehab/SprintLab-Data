@@ -7,7 +7,7 @@ API-> Django app
 Workflows -> workflow for push/pr to each branch will automate running the relevant test scripts 
 ## Actions Template
 ### Example .yml file
-name: Test [Name of Module/Script]
+`name: Test [Name of Module/Script]
 run-name: ${{ github.actor }} is testing [Name of Module/Script] 
 on: 
   push:
@@ -24,4 +24,4 @@ jobs:
       - run: pip install -r requirements/[Name of Module/Script].txt 
       - run: pytest tests/test_[Name of Module/Script].py 
       
-
+` 

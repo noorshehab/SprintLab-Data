@@ -5,7 +5,7 @@ Requirements -> separate requirements in separate .txt files in the requirements
 
 Notebooks/Experiments -> where trying machine learning ideas will happen as well as any EDA and its outputs.
 
-ML-> where training the fina models will be done and where the services wrapping model calls will live.
+ML-> where training the final models will be done and where the services wrapping model calls will live.
 
 API-> Django app.
 

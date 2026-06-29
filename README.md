@@ -1,10 +1,14 @@
 # Conventions
 Tests -> Test folder.
 
-Requirements -> separate requirements in separate .txt files in the requirements folder to make installing dependencies for testing each module easier./
-Notebooks/Experiments -> where trying machine learning ideas will happen as well as any EDA and its outputs./
+Requirements -> separate requirements in separate .txt files in the requirements folder to make installing dependencies for testing each module easier.
+
+Notebooks/Experiments -> where trying machine learning ideas will happen as well as any EDA and its outputs.
+
 ML-> where training the fina models will be done and where the services wrapping model calls will live.
+
 API-> Django app.
+
 Workflows -> workflow for push/pr to each branch will automate running the relevant test scripts.
 ## Actions Template
 ### Example .yml file

@@ -1,5 +1,6 @@
 # Conventions
 Tests -> Test folder.
+
 Requirements -> separate requirements in separate .txt files in the requirements folder to make installing dependencies for testing each module easier./
 Notebooks/Experiments -> where trying machine learning ideas will happen as well as any EDA and its outputs./
 ML-> where training the fina models will be done and where the services wrapping model calls will live.

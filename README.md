@@ -37,3 +37,8 @@ Requirements are separated by module/concern to update them we use pipreqs in th
 ```powershell
 pipreqs [foldername]/ --savepath requirements/[foldername].txt
 ```
+
+POSTGRES_DB=mlflow
+PGPORT=5432
+POSTGRES_USER=mlflow
+POSTGRES_PASSWORD=mlflow

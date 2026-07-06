@@ -1,0 +1,165 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Pytest
+.pytest_cache/
+pytest-debug.log
+.testmondata
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# MLflow
+mlruns/
+mlflow.db
+mlflow_artifacts/
+*.metrics
+*.params
+*.tags
+*.proto
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*.pyc
+*.pynb
+
+# Python packages
+*.egg-info/
+dist/
+build/
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Database files (MongoDB is in Docker, but local SQLite might exist)
+*.db
+*.sqlite
+*.sqlite3
+*.mongodb
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+*.pid
+
+# Environment variables (keep templates but ignore actual values)
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Logs
+logs/
+*.log
+mlflow.log
+*.out
+*.err
+
+# Models and data files (large files not for git)
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Data files
+data/
+datasets/
+*.csv
+*.parquet
+*.jsonl
+*.npy
+*.npz
+*.pkl.z
+*.feather
+
+# Output directories
+outputs/
+results/
+checkpoints/
+runs/
+experiments/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Secrets and keys
+*.key
+*.pem
+*.crt
+*.p12
+*.p8
+*.secret
+*.secrets
+
+# Configuration with secrets
+config.local.yaml
+config.local.yml
+secrets.yaml
+secrets.yml
+credentials.json
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytype
+.pytype/
+
+# Cython
+cython_debug/
+
+# Python profiling
+*.prof
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Generated files
+*.generated.py
+*_pb2.py
+*_pb2_grpc.py
+
+# Ray (if you're using it)
+ray_results/
+/session_latency.json
+
+# DVC (if using)
+.dvc/
+.dvcignore
+*.dvc

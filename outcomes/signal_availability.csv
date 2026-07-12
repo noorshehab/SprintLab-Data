@@ -1,0 +1,11 @@
+signal,status,source
+correctness,present,responses.responses (0/1)
+sequencing (event order),present (coarse),"timestamps, ordered per student"
+attempt index per question,derivable,canonicalize_events() dedup + cumcount
+response time / latency,ABSENT,"single timestamp per event, no duration field"
+distractor / chosen-option,ABSENT,responses.csv stores 0/1 only
+cognitive load index,ABSENT,not present in any file
+question type,present,question_metadata.type (fill-in vs single-choice)
+empirical difficulty,present,error_rate columns (question/kc/analysis metadata)
+KC taxonomy / prerequisite tree,present,tree_translation.txt + kc_metadata.kc_route
+practice / learning effect,present (pre-aggregated),"practice_effect_perKC/perQ, chronological_delta"

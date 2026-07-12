@@ -83,8 +83,10 @@ mlflow.log
 *.safetensors
 *.bin
 
-# Data files
+# Data files (raw proxy dataset stays out of git -- lives in the Modal Volume;
+# curated study outcomes are explicitly un-ignored below)
 data/
+cache/
 datasets/
 *.csv
 *.parquet
@@ -95,11 +97,15 @@ datasets/
 *.feather
 
 # Output directories
-outputs/
 results/
 checkpoints/
 runs/
 experiments/
+
+# Study outcomes ARE tracked: small, curated artifacts (aggregates, params,
+# figures) that back the paper's Results section -- not raw data.
+!outcomes/
+!outcomes/**
 
 # IDE files
 .vscode/

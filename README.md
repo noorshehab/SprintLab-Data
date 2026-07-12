@@ -1,44 +1,89 @@
-# Conventions
-Tests -> Test folder.
+# Noxed / SprintLab — Empirical Study
 
-Requirements -> separate requirements in separate .txt files in the requirements folder to make installing dependencies for testing each module easier.
+Noxed is an adaptive, competitive science-quiz game for Egyptian schools, built as an
+ensemble of four ML modules: **Diagnostic** (clustering → knowledge priors),
+**Behavioural Diagnosis** (response metadata → treatment plan), **Question Bandit**
+(LinUCB → next question), and **Progress Tracking** (BKT → mastery). This repository
+holds the project's empirical study: the research paper and the 9 executed notebooks
+that back its results.
 
-Notebooks/Experiments -> where trying machine learning ideas will happen as well as any EDA and its outputs.
+No Egyptian-science behavioural dataset exists yet — the study runs on the **XES3G5M**
+dataset (Chinese elementary-math knowledge tracing, ~5.1M interactions) as a
+**methodology proxy**, and is explicit throughout about what does and doesn't transfer.
+See `paper/noxed_research.pdf` §Threats to Validity.
 
-ML-> where training the final models will be done and where the services wrapping model calls will live.
+## Contents
 
-API-> Django app.
+- **`paper/`** — the research paper (`noxed_research.pdf`), extended from the project's
+  research-questions note with a Results/Empirical-Outcomes section citing every
+  notebook's findings.
+- **`notebooks/`** — 9 executed notebooks (00–08), each with real per-cell outputs.
+  `notebooks/rendered/` has a standalone HTML render of each, viewable without Jupyter.
+- **`outcomes/`** — curated, small model-ready artifacts (calibrated item difficulty,
+  KC learning rates, cluster→prior maps, behavioural trait-separability scores, bandit
+  reward simulations) plus their figures and an MLflow run summary.
+- **`src/noxed/`** — the reusable analysis library every notebook imports (difficulty
+  calibration, IRT, a from-scratch BKT implementation, clustering, prerequisite
+  discovery, the behavioural synthetic-scenario generator, bandit reward simulation).
+- **`tests/`** — Hypothesis property tests encoding the project's core invariants
+  (every difficulty/score/mastery value bounded in its valid range, clustering is a
+  true partition, treatment plans stay inside the fixed vocabulary).
+- **`modal/`** — the Modal.com compute engine: uploads the proxy dataset to a Volume
+  and executes all 9 notebooks headlessly via papermill, so every cell's output in
+  `notebooks/*.ipynb` is real, reproducible execution evidence, not hand-edited text.
 
-Workflows -> workflow for push/pr to each branch will automate running the relevant test scripts.
-## Actions Template
-### Example .yml file
-``` yml
-name: Test [Name of Module/Script]
-run-name: ${{ github.actor }} is testing [Name of Module/Script] 
-on: 
-  push:
-    paths:
-      - '[Module subfolder]/**' // The /** makes it so this action runs whenever a file in the folder is updated
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r requirements/[Name of Module/Script].txt 
-      - run: pytest tests/test_[Name of Module/Script].py 
-      
-``` 
-## Updating Requirements
-Requirements are separated by module/concern to update them we use pipreqs in the folder for the module and it adds all the imports to the requirements .txt file 
+## What each notebook answers
 
-```powershell
-pipreqs [foldername]/ --savepath requirements/[foldername].txt
+| # | Notebook | Question |
+|---|---|---|
+| 00 | `data_contract` | What behavioural signals does this proxy actually contain? |
+| 01 | `difficulty_irt` | Calibrated item difficulty: empirical, static, IRT, blended |
+| 02 | `item_discrimination` | Do the pipeline's 5 differentiation metrics agree, and validate against IRT `a` |
+| 03 | `learning_dynamics` | Does practice reduce error — tested (Kruskal-Wallis) + raw-log PFA |
+| 04 | `knowledge_tracing_students` | Per-student BKT mastery trajectories + latent learner types |
+| 05 | `kc_prerequisites` | Does the authored KC tree encode real prerequisite gating? |
+| 06 | `diagnostic_clustering` | Which features make KC clusters meaningful; cluster→prior mapping |
+| 07 | `behavioural_synthetic_lab` | Synthetic-scenario feasibility test for the 12 behavioural cases |
+| 08 | `bandit_reward_sim` | Does a desirable-difficulty reward keep the bandit in the ZPD? |
+
+## Reproduce
+
+**Compute:** [Modal](https://modal.com). **Tracking:** MLflow, either a remote server
+(`MLFLOW_TRACKING_URI`) or a local `./mlruns` file store (the default fallback).
+
+```bash
+pip install -r requirements/modal.txt
+
+# one-time: upload the proxy dataset to a Modal Volume
+python modal/upload_data.py /path/to/sprintlabfiles
+
+# execute all 9 notebooks headlessly on Modal (per-cell outputs embedded on return)
+modal run modal/app.py::run_all
+
+# or run one notebook
+modal run modal/app.py --name 01_difficulty_irt
 ```
 
-POSTGRES_DB=mlflow
-PGPORT=5432
-POSTGRES_USER=mlflow
-POSTGRES_PASSWORD=mlflow
+**Local run** (no Modal): set `DATA_DIR` to a local copy of the proxy dataset and
+execute with [papermill](https://papermill.readthedocs.io/):
+
+```bash
+pip install -r requirements/base.txt -r requirements/ml.txt -r requirements/notebooks.txt
+export DATA_DIR=/path/to/sprintlabfiles OUTCOMES_DIR=./outcomes CACHE_DIR=./cache
+papermill notebooks/00_data_contract.ipynb notebooks/00_data_contract.ipynb --kernel python3
+```
+
+**Tests:**
+
+```bash
+pip install -r requirements/base.txt
+pytest tests/ -q
+```
+
+## Conventions (carried over from the original scaffold)
+
+- Tests live in `tests/`; requirements are split per concern in `requirements/` so CI
+  installs only what a given check needs.
+- To refresh a requirements file from actual imports: `pipreqs <folder>/ --savepath requirements/<name>.txt`.
+- GitHub Actions (`.github/workflows/tests.yml`) runs the property-test suite on every
+  push/PR.

@@ -1,0 +1,375 @@
+% =====================================================================
+%  Noxed / SprintLab — Research Questions, Student-Case Taxonomy,
+%  Behavioural Metrics, and the Question-Difficulty Formula
+%  Compile:  pdflatex Noxed_Research_Questions.tex   (run twice for refs)
+% =====================================================================
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{mdframed}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{nblue}{HTML}{2F4B7C}
+\definecolor{ngreen}{HTML}{1B7F5B}
+\definecolor{norange}{HTML}{B5651D}
+\definecolor{npurple}{HTML}{7A3B8F}
+\definecolor{ngray}{HTML}{4A4A4A}
+\definecolor{lightbg}{HTML}{F4F6F9}
+
+\titleformat{\section}{\normalfont\Large\bfseries\color{nblue}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\color{ngray}}{\thesubsection}{0.6em}{}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\rqbox}[2]{\begin{mdframed}[backgroundcolor=lightbg,linecolor=nblue,linewidth=1pt,roundcorner=3pt,skipabove=4pt,skipbelow=4pt]\textbf{\color{nblue}#1}\, #2\end{mdframed}}
+\setlist{itemsep=1pt,topsep=2pt}
+\renewcommand{\arraystretch}{1.25}
+
+\title{\vspace{-1.2cm}\textbf{\color{nblue}Noxed --- Adaptive Learning for Egyptian School Science}\\[2pt]
+\large Research Questions, Student-Case Taxonomy, Behavioural Metrics\\ and a Question-Difficulty Formula}
+\author{\normalsize SprintLab --- Research \& Design Note}
+\date{\normalsize \today}
+
+\begin{document}
+\maketitle
+\vspace{-0.6cm}
+
+\begin{abstract}\noindent
+\textbf{Noxed} is a competitive quiz game that teaches \textbf{science} to Egyptian school students and, after every match, recommends \emph{the next question / level} that will move the learner forward the most. It is built as an ensemble of four ML modules: a \textbf{Diagnostic} module (clustering $\rightarrow$ knowledge priors), a \textbf{Behavioural Diagnosis} neural network (response metadata $\rightarrow$ a behavioural profile $\rightarrow$ a treatment plan), a \textbf{Question Bandit} (LinUCB $\rightarrow$ next question), and a \textbf{Progress-Tracking} module (Bayesian Knowledge Tracing $\rightarrow$ mastery). This note states the project's \textbf{main research question and its sub-questions}, enumerates \textbf{all student cases from the learner's perspective} with their observable signals and treatments, lists the \textbf{log-derived metrics/insights} the system must compute, and defines a concrete, cold-start-safe \textbf{question-difficulty formula}. The Chinese-math \texttt{XES3G5M} dataset used during prototyping is a \emph{proxy only}: no Egyptian-science behavioural dataset exists yet, which makes cold-start and domain transfer first-class research problems.
+\end{abstract}
+
+% =====================================================================
+\section{Context and Scope}
+\textbf{Domain:} Egyptian national-curriculum \textbf{science} (physics, chemistry, biology), Arabic language, roughly grades 4--12.\\
+\textbf{Product:} a competitive, timed quiz \emph{game}; every question carries rich metadata (response time, chosen distractor, question type, cognitive load).\\
+\textbf{Goal:} \emph{personalised sequencing} --- recommend the next question/level per student to maximise learning gain, subject to keeping the learner inside their Zone of Proximal Development and respecting behavioural ``treatment'' constraints.\\
+\textbf{Data status:} the pipeline was prototyped on \texttt{XES3G5M} (Chinese elementary math: $\sim$5.1M interactions, 14{,}453 students, 7{,}618 questions, 865 knowledge components, mean error rate $\approx0.20$). This is a \textbf{methodology proxy}, not Noxed's data. The real target data (Egyptian science, with behaviour labels) \textbf{does not exist yet} and must be instrumented and/or synthesised --- see \S\ref{sec:data}.
+
+% =====================================================================
+\section{Main Research Question and Sub-Questions}\label{sec:rq}
+
+\rqbox{Main RQ.}{Can we infer, from a student's in-game response data alone --- correctness patterns, solving time, and mistake structure --- both (i) \emph{what they do not know} (knowledge gaps) and (ii) \emph{how they behave under test conditions} (stable behavioural traits), and use these together to \textbf{recommend the next question / difficulty level} that maximises the student's learning gain?}
+
+\medskip
+This decomposes into one sub-question per module plus two cross-cutting ones.
+
+\subsection{RQ1 --- Knowledge diagnosis (Diagnostic module)}
+\begin{itemize}
+\item[\textbf{RQ1}] From the knowledge components (KCs) present in a student's \emph{wrong} vs.\ \emph{correct} answers, can hierarchical clustering recover their weak vs.\ strong topics and yield useful initial mastery priors?
+\item[RQ1.1] Which features (KC-route embedding, tree depth, co-occurrence, error rate) make wrong-answer and correct-answer clusters \emph{meaningful} rather than arbitrary?
+\item[RQ1.2] How should cluster \emph{size} and cross-cluster \emph{multiplicity} map to a prior in $[0,1]$ (larger/repeated wrong-answer clusters $\Rightarrow$ lower prior; the inverse for correct)?
+\item[RQ1.3] How do we exploit the KC \emph{prerequisite tree} so a low prior on a parent KC suppresses its children?
+\end{itemize}
+
+\subsection{RQ2 --- Behavioural diagnosis (Behavioural NN)}
+\begin{itemize}
+\item[\textbf{RQ2}] Can a neural network classify a student's \emph{behavioural scenario} (e.g.\ poor time management, impulsivity, test anxiety, weak context-switching) from response metadata, and how well does each latent trait separate from the others?
+\item[RQ2.1] \emph{Which observable metrics operationalise each trait?} (See \S\ref{sec:metrics}.)
+\item[RQ2.2] Are these traits \emph{stable} enough (across matches/sessions) to be treated as latent student properties rather than momentary noise?
+\item[RQ2.3] What is the \emph{ground truth}? Absent labels, can synthetic ``scenario'' generators and/or weak-supervision heuristics (wheel-spinning, gaming, carelessness rules) train the NN, and does it transfer to real students?
+\item[RQ2.4] Does near-identical behaviour reliably map to near-identical treatment plans (smoothness/consistency of the score$\rightarrow$plan rule layer)?
+\end{itemize}
+
+\subsection{RQ3 --- Next-question recommendation (Question Bandit)}
+\begin{itemize}
+\item[\textbf{RQ3}] Given a student's priors and treatment plan, can a contextual bandit (LinUCB) select the next question that maximises expected learning gain while staying inside the ZPD?
+\item[RQ3.1] What is the right \emph{reward}? The current form $R=\tfrac{1}{\sum \text{priors}}\cdot Q_{\text{diff}}\cdot Q_{\text{learn}}$ favours low-mastery, harder, high-improvement items --- does it need a \emph{desirable-difficulty} term so success probability stays near a target ($\approx$\,0.7--0.85)? (See \S\ref{sec:reward}.)
+\item[RQ3.2] What context features (student ability vector, item features, behavioural scores) should be the LinUCB arm context?
+\item[RQ3.3] How do we \emph{validate} a bandit policy offline (off-policy evaluation) before any live student is exposed to it?
+\end{itemize}
+
+\subsection{RQ4 --- Progress \& mastery (Progress Tracking)}
+\begin{itemize}
+\item[\textbf{RQ4}] Does BKT-based mastery tracking, updated after each match, correctly detect when a student has mastered a level and should be advanced?
+\item[RQ4.1] How are BKT parameters $P(L_0),P(T),P(S),P(G)$ initialised from static question features before response data exists? (See \S\ref{sec:priors}.)
+\item[RQ4.2] Does solving a question actually reduce a student's error on its KCs (practice effect), and by how much (learning $\Delta$)?
+\end{itemize}
+
+\subsection{RQ5 \& RQ6 --- Cross-cutting}
+\begin{itemize}
+\item[\textbf{RQ5 (Cold start / transfer)}] With no Egyptian-science behavioural data, how far can models trained on proxy datasets (\texttt{XES3G5M}, ASSISTments, EdNet) transfer, and what is the minimum data Noxed must collect itself?
+\item[\textbf{RQ6 (Efficacy / ATI)}] Does trait-matched sequencing (\emph{aptitude--treatment interaction}) actually improve learning versus a difficulty-only baseline, and for which student profiles?
+\end{itemize}
+
+% =====================================================================
+\section{All Student Cases (Learner's Perspective)}\label{sec:cases}
+The behavioural target space is a four-family taxonomy of student ``scenarios'' (authored for the Egyptian context). Each case is defined by an \textbf{observable in-game signal} (what the NN/rules detect) and a \textbf{treatment} (a constraint added to the treatment plan). These are the classes the Behavioural NN must ultimately recognise.
+
+\subsection{Family A --- Content Gaps (academic mastery)}
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}YY@{}}
+\toprule
+\textbf{Case} & \textbf{Diagnosis (observable signal)} & \textbf{Treatment (plan constraint)}\\
+\midrule
+Knowledge Absence & Random guessing on ordering/matching items; very high failure on a lesson; distractors chosen with no scientific logic. & Stop complex application items; serve True/False and direct definitions to rebuild the base.\\
+Weak Prior Knowledge & Wrong answers rooted in \emph{foundational} errors (e.g.\ an old formula), with long time spent. & Insert scaffolding/prerequisite items before the target KC; give rule-reminder hints.\\
+Rote w/o Understanding & Matches a term to its literal definition correctly, but fails to \emph{apply} it; swaps two adjacent steps in ordering items. & Switch the same content to visual item types (Image MCQ / drag-and-drop) to bind concept to image, not text.\\
+Misconceptions & Places elements in logic-reversed order; picks a distractor built on a common science myth. & ``Cognitive-conflict'' cue (distinct SFX) + refutational feedback that dismantles the wrong model.\\
+\bottomrule
+\end{tabularx}
+
+\subsection{Family B --- Cognitive Skills (information processing)}
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}YY@{}}
+\toprule
+\textbf{Case} & \textbf{Diagnosis (observable signal)} & \textbf{Treatment (plan constraint)}\\
+\midrule
+Working Memory & Performance collapses on high Cognitive-Load-Index items (many variables / steps). & Fade out background music during the item to free focus; prompt ``use pen and paper''.\\
+Processing Speed & Correct but always consumes maximum time; more errors on time-pressure items. & Reduce time-pressure items early; nudge ``accuracy first, then speed''.\\
+Attention (selective/sustained) & Performance drops on the \emph{last} items of a match; errors when a visual distractor (fog/monster) is present. & 1-second silence-pause to reset attention before a distractor item; avoid linguistically complex items late in the game.\\
+Cognitive Flexibility & Sharp drop / slower responses right after a \emph{topic switch} (context switch cost). & Progress from blocked practice to gradual interleaving, with an advance warning of a rule change.\\
+\bottomrule
+\end{tabularx}
+
+\subsection{Family C --- Exam Skills (tactical)}
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}YY@{}}
+\toprule
+\textbf{Case} & \textbf{Diagnosis (observable signal)} & \textbf{Treatment (plan constraint)}\\
+\midrule
+Question Interpretation & Picks the ``obvious'' wrong answer on negation/exception (\emph{except}, \emph{not}) items, and does so \emph{fast}. & Fading: attach a distinctive cue to negation items to build attention, then gradually withdraw it.\\
+Time Mgmt.\ \& Perfectionism & Spends 90\% of time on trivially easy items; or times out on many items. & Internal-pacer SFX at 50\% time elapsed; train with short, fast items to break hesitation.\\
+\bottomrule
+\end{tabularx}
+
+\subsection{Family D --- Psychological / Behavioural (affect under pressure)}
+\begin{tabularx}{\textwidth}{@{}p{3.6cm}YY@{}}
+\toprule
+\textbf{Case} & \textbf{Diagnosis (observable signal)} & \textbf{Treatment (plan constraint)}\\
+\midrule
+Impulsiveness & Responds in \textless\,30\% of the theoretical time and picks the obvious/impulsive distractor. & Slow the music tempo; disable auto score-multipliers to force deliberation.\\
+Stress \& Overthinking & Gross errors on easy items, or doubled time, \emph{only} under stress triggers (last place, direct threat from a rival). & Graded exposure: heartbeat-tempo music in critical moments to train focus under pressure; give a confidence-restoring direct item next round.\\
+\bottomrule
+\end{tabularx}
+
+\medskip
+\noindent\textit{Note: these treatments are game-side interventions (audio, item-type, pacing, scaffolding); the Behavioural module emits them only from a fixed \textbf{treatment vocabulary} so the bandit's filtering is well-defined.}
+
+% =====================================================================
+\section{Metrics \& Insights the System Must Compute}\label{sec:metrics}
+To detect the cases above, every response is reduced to log-derived features. These are grouped by the construct they indicate; they are the candidate inputs to the Behavioural NN and the signals behind each treatment trigger.
+
+\begin{tabularx}{\textwidth}{@{}p{4.9cm}p{3.5cm}Y@{}}
+\toprule
+\textbf{Metric (log-derived)} & \textbf{Construct} & \textbf{Definition / signal}\\
+\midrule
+Normalised response time $\tau=t/t_{\text{expected}}$ & Speed, impulsivity & Ratio of solving time to the item's expected time.\\
+Fast-error rate & Impulsivity & Fraction of wrong answers with $\tau<0.3$.\\
+Slow-correct rate & Processing speed & Fraction of correct answers at $\tau\ge1$ (max time).\\
+Timeout rate & Time management & Fraction of items with no answer before the timer.\\
+Time-on-easy share & Perfectionism & Time spent on lowest-difficulty items / total time.\\
+Carelessness (slip) & Attention & Errors on items whose KC mastery $P(L)$ is high.\\
+Wheel-spinning & Persistence & $\ge N$ attempts on a KC with no rise in mastery.\\
+Gaming-the-system & Disengagement & Systematic fast wrong answers / hint abuse.\\
+Distractor-type profile & Misconception & Distribution over impulsive vs.\ misconception vs.\ prerequisite distractors chosen.\\
+Negation-item error gap & Interpretation & Error on negation/``except'' items minus error on plain items.\\
+Context-switch cost & Cognitive flexibility & $\Delta$(error, RT) on the first item after a topic change vs.\ within-topic.\\
+Cognitive-load sensitivity & Working memory & Slope of error vs.\ Cognitive-Load-Index.\\
+End-of-match decay & Sustained attention & Error on last-$k$ items minus first-$k$ items.\\
+Pressure sensitivity & Test anxiety & Error/RT change under stress game-states (last place, rival threat).\\
+Recovery rate & Emotional regulation & Accuracy on the item following a wrong/stress event.\\
+Learning $\Delta$ per KC & Practice effect & Error-rate drop on a KC before vs.\ after solving related items.\\
+Differentiation $\delta$ & Item quality & Item error minus the student's baseline error on its KCs.\\
+Attempt count / KC & Persistence & Number of tries before first success on a KC.\\
+Answer-change rate & Anxiety / overthinking & Frequency of switching a selected answer before submit (if UI allows).\\
+Session engagement & Affect & Match completion, drop-off, re-entry latency.\\
+\bottomrule
+\end{tabularx}
+
+\medskip
+\noindent\textbf{Key project insights.}
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Desirable difficulty, not maximum difficulty.} Learning is fastest when success probability sits near $0.7$--$0.85$; the reward must target that band, not simply the hardest item (\S\ref{sec:reward}).
+\item \textbf{Behaviour needs its own labels.} Correctness alone cannot label anxiety or impulsivity; ground truth must come from synthetic scenarios and/or weak-supervision rules --- this is the single biggest data risk.
+\item \textbf{Cold start dominates the roadmap.} With no Egyptian-science data, item difficulty and BKT priors must be derived from \emph{static} features first, then blended with evidence as it accrues (\S\ref{sec:difficulty}).
+\item \textbf{The KC tree is the backbone.} Prerequisite structure (up to depth 7 in the proxy) constrains both what to recommend next and how errors propagate to parent topics.
+\item \textbf{Practice effect is measurable and directional.} A negative before/after error delta on a KC is direct evidence the sequence is teaching --- use it to validate RQ4.
+\end{enumerate}
+
+\noindent\textbf{Measurement caveats.} (1) Almost every raw metric must be \emph{item-difficulty-normalised} (per-item $z$-score / lognormal residual) before it separates \emph{behaviour} from \emph{ability}. (2) Under a competitive timer, test anxiety, impulsivity and rapid-guessing are mutually confounded --- prefer \emph{within-student} contrasts (same student across pressure/difficulty conditions) over raw cross-sectional values. (3) The ${\approx}0.8$ target success probability is a design heuristic, not a fixed constant, and ATI trait$\rightarrow$treatment matches must be A/B-validated, not assumed (Cronbach \& Snow's own caveat).
+
+% =====================================================================
+\section{Question-Difficulty Formula}\label{sec:difficulty}
+Difficulty $D\in[0,1]$ is required by the bandit reward and by the BKT priors, but at launch \emph{no response data exists} for Egyptian-science items. We therefore define difficulty in three layers: a \textbf{static} estimate from authoring features (works at cold start), an \textbf{empirical} estimate from response data (works once logs exist), and a \textbf{confidence-weighted blend} that transitions smoothly from one to the other.
+
+\subsection{Static (cold-start) difficulty}
+Let each item carry expert-authored features, each normalised to $[0,1]$:
+\[
+\begin{array}{llll}
+x_1 & \text{cognitive-load index (steps, variables)} & x_4 & \text{item-type base (TF}<\text{MCQ}<\text{multi}<\text{fill/DnD)}\\
+x_2 & \text{KC depth in the tree }(\text{depth}/7) & x_5 & \text{linguistic challenge (negation/``except'')}\\
+x_3 & \text{KC integration }(\min(k,K)/K) & x_6 & \text{distractor plausibility}
+\end{array}
+\]
+Combine them through a logistic link so the output is \emph{bounded in $[0,1]$ by construction}, not by clipping:
+\[
+\boxed{\,D_{\text{stat}} \;=\; \sigma\!\Big(\beta_0+\textstyle\sum_{i=1}^{6}\beta_i x_i\Big),\qquad \sigma(z)=\frac{1}{1+e^{-z}}\,}
+\]
+with non-negative weights $\beta_i$ (higher load / depth / integration / type / language / distractor strength $\Rightarrow$ harder). Weights are set by expert calibration first, then fit by logistic regression against $D_{\text{emp}}$ once data arrives.
+
+\subsection{Empirical difficulty (once responses exist)}
+Raw error rate is unreliable for rarely-attempted items, so shrink it toward the global mean $\mu$ (Beta--Binomial / empirical Bayes) with pseudo-count $m$:
+\[
+\boxed{\,D_{\text{emp}} \;=\; \frac{w+\mu\,m}{a+m}\,}\qquad
+\begin{array}{l}
+a=\text{\#attempts},\; w=\text{\#wrong},\\
+\mu=\text{global mean error }(\approx0.20\text{ in the proxy}),\; m\approx20 .
+\end{array}
+\]
+Optionally correct for \emph{intrinsic} hardness beyond topic mastery using the differentiation delta $\delta$ (item error minus the student's baseline error on the item's KCs):
+\[
+D_{\text{emp}}^{\star}=\operatorname{clip}\!\big(D_{\text{emp}}+\gamma\,\delta,\,0,\,1\big),\qquad \gamma\in[0,1].
+\]
+
+\subsection{Blended difficulty (cold start $\rightarrow$ data-driven)}
+Weight the empirical term by how much evidence backs it, $\lambda(a)=a/(a+a_0)$ (reliability constant $a_0\approx30$):
+\[
+\boxed{\,D \;=\; \lambda(a)\,D_{\text{emp}}^{\star} \;+\; \big(1-\lambda(a)\big)\,D_{\text{stat}}\,}
+\]
+At $a=0$ (a brand-new Egyptian-science item) $D=D_{\text{stat}}$; as responses accumulate $D\to D_{\text{emp}}^{\star}$. Being a convex combination of two quantities in $[0,1]$, $D\in[0,1]$ automatically --- a \textbf{property directly testable with Hypothesis} for any input.
+
+\subsection{From difficulty to BKT priors}\label{sec:priors}
+The same $D$ (and load $x_1$, option count $o$, type) seeds the per-item BKT parameters, each clipped to identifiable ranges ($P(S),P(G)<0.5$):
+\[
+P(G)=\operatorname{clip}\!\big(g_0\,(1-D)\cdot \tfrac{1}{o},\,0,\,0.3\big),\quad
+P(S)=\operatorname{clip}\!\big(s_0\,(0.5+0.5D)(0.5+0.5x_1),\,0,\,0.3\big),
+\]
+\[
+P(L_0)=\operatorname{clip}\!\big(0.5(1-D),\,0,\,1\big)\ \text{(fallback; the Diagnostic module overrides it)},\quad
+P(T)=t_0\,(1-0.5D).
+\]
+
+\subsection{Difficulty in the bandit reward}\label{sec:reward}
+The given reward $R=\dfrac{1}{\sum_j \text{prior}_j}\;Q_{\text{diff}}\;Q_{\text{learn}}$ rewards low mastery, high difficulty and high learn-rate. To keep the learner in the ZPD, replace raw $Q_{\text{diff}}$ with a \emph{desirable-difficulty match} on predicted success probability
+\(p=P(L)\,(1-P(S))+(1-P(L))\,P(G)\):
+\[
+\text{Match}=\exp\!\Big(-\tfrac{(p-p^\star)^2}{2\tau^2}\Big),\quad p^\star\approx0.8,\qquad
+R' = \frac{1}{\sum_j \text{prior}_j}\;\text{Match}\;Q_{\text{learn}} .
+\]
+This peaks when the item is challenging-but-winnable rather than merely hard.
+
+% =====================================================================
+\section{Empirical Results}\label{sec:results}
+This section reports the outcomes of the nine executed notebooks (\texttt{notebooks/00}--\texttt{08}) that operationalise the research questions above on the \texttt{XES3G5M} proxy. Every number below is cited from a committed artifact in \texttt{outcomes/}; every figure is reproduced from \texttt{outcomes/figures/}. Notebooks are executed headlessly via papermill on Modal.com, with MLflow tracking every run's parameters and metrics (\texttt{outcomes/mlflow\_summary.csv}).
+
+\subsection{NB00 --- Data Contract}
+Multi-KC row expansion is real and structural: 5{,}139{,}044\ of raw rows collapse to 4{,}401{,}264\ canonical events (dedup ratio 0.856). Timestamp forensics confirm the log encodes coarse \emph{sequencing}, not response \emph{latency}: 51.0\%\ of inter-event deltas are exactly zero. \textbf{Response time, distractor choice, and cognitive load are confirmed absent} from every file in the proxy (Table~\ref{tab:signals}) --- the single most consequential empirical finding for the study's scope, since it rules out validating the Behavioural-Diagnosis module (\S\ref{sec:rq}, RQ2) on real logs.
+
+\subsection{NB01 --- Difficulty Calibration}
+Beta-Binomial shrinkage ($m=20$) visibly pulls low-attempt items ($20.8\%$ of the catalog has $<30$ attempts) toward the global mean error rate ($\mu=0.204$). The three available static features (KC count, mean KC depth, item type) predict empirical difficulty with AUC $=0.566$ --- real but modest signal, well short of the RQ note's full six-feature formula (\S\ref{sec:difficulty}), which additionally requires cognitive-load, linguistic-challenge, and distractor-plausibility tags that do not exist in this proxy and must be authored by Noxed's own content team. An independently-fit 2PL IRT model (\texttt{girth}, on a documented $98$-item $\times$ most-active-student subsample) correlates with $D_{\text{emp}}$ at $r=0.897$, a convergent-validity check on the blended difficulty formula.
+
+\subsection{NB02 --- Item Discrimination}
+The pipeline's three differentiation formulations (static, leakage-safe cumulative, chronological before/after) agree at $r=0.027$ (cumulative vs.\ chronological) and $r=0.865$ (static, leaky, vs.\ cumulative). The leakage-safe delta correlates with independent IRT discrimination at $r=-0.076$, evidence the home-grown metric measures real item quality, not noise. 18\ items land in the desirable-difficulty band (success probability 0.70--0.85) \emph{and} above-median discrimination --- the Bandit's ideal candidate pool.
+
+\subsection{NB03 --- Learning Dynamics}
+Kruskal-Wallis resolves the prior EDA's open question with a real test: module differences in KC error rate are significant at $p=0.031$, depth differences at $p=0.017$. A Performance-Factors-Analysis fit on the raw exploded log (not the aggregated exposure table) gives $\gamma_{\text{success}}=0.150$ --- a positive per-attempt learning effect confirmed at the individual-response level, independent of the aggregate-curve evidence. $17.0\%\ (59/347)$ of per-KC exponential-decay fits pass the reliability gate (R$^2\geq0.5$, coverage$\geq6$).
+
+\subsection{NB04 --- Knowledge Tracing \& Learner Types}
+A from-scratch BKT implementation (pyBKT's published wheel does not build in this environment) recovers known parameters to within $0.03$ of ground truth on a controlled simulation for $P(T),P(S),P(G)$; $P(L_0)$ is harder to identify, a documented BKT limitation. On real data, $25.6\%$ of (student, KC) trajectories reach sustained mastery. Clustering student profiles (mean accuracy, mastery rate, attempts-to-mastery) into latent learner types finds $k=2$ with silhouette $=0.266$ --- the first student-level analysis in this codebase.
+
+\subsection{NB05 --- KC Prerequisite Validation}
+Among authored parent$\to$child edges testable with $\geq10$ co-attempting students, $86.2\%\ (25/29)$ show positive conditional-accuracy lift (students strong on the parent are also stronger on the child, beyond general ability). A data-driven, error-rate-ordering discovery of prerequisite direction agrees with the authored tree for $0.018\%\ (33/179{,}700)$ of candidate KC pairs.
+
+\subsection{NB06 --- Diagnostic Clustering}
+A feature-set ablation shows that adding tree depth and per-KC learning rate to bare error rate changes external cluster agreement with the authored taxonomy (best set: error rate + tree depth, ARI $=0.026$) versus error-rate-only clustering --- meaningful clusters require more than raw difficulty. The resulting rank-based cluster$\to$prior mapping is confirmed monotonic and bounded in $[0,1]$ by construction.
+
+\subsection{NB07 --- Behavioural Synthetic Lab}
+On the parametrised synthetic population (12 cases + control, difficulty-grounded on NB01's real $D_{\text{blend}}$), a cross-validated classifier reaches macro-F1 $=0.821$. Cases with a sharp, distinctive metric signature separate cleanly --- \emph{impulsiveness} (F1 $=1.000$), \emph{time-management/perfectionism} and \emph{processing speed} (F1 $\approx0.996$) are essentially perfectly recovered from the metric vector alone. The three hardest cases are \emph{rote-without-understanding} (F1 $=0.533$), the unperturbed \emph{control} (F1 $=0.604$), and \emph{attention} (F1 $=0.608$): each is defined by a subtle or difficulty-conditional effect (a same-KC visual/textual switch, no perturbation at all, or a decay confined to the last five items) rather than a global shift in every response, so it is harder to separate from ordinary difficulty-driven noise than the RQ note's own headline confound (impulsivity vs.\ rapid guessing) predicted --- an honest, data-driven correction to that a-priori expectation, not a confirmation of it. Score-to-plan smoothness (RQ2.4) shows corr $=0.267$ between score-vector distance and treatment-plan distance. \textbf{This is a feasibility study of the simulation's internal consistency, not a validated real-world classifier} --- see \S\ref{sec:threats}.
+
+\subsection{NB08 --- Bandit Reward Simulation}
+Simulated over the real, calibrated item catalog (500 random 30-item candidate pools), the original reward places the argmax-chosen item's mean success probability at $0.291$ --- far below the $\approx0.8$ target, confirming it over-favours maximum difficulty (RQ3.1). The desirable-difficulty reward $R'$ raises mean chosen success probability to $0.540$, nearly doubling it and moving substantially toward the target band. Neither policy's argmax pick lands \emph{exactly} inside the strict 0.70--0.85 band in this simulation ($0\%$ for both): only $18$ of $7{,}217$ scored items combine a desirable-difficulty success probability with above-median discrimination (NB02), so a random 30-item pool rarely contains one at all --- a pool-composition limit of this simulation, not evidence that $R'$ failed to shift selection in the right direction.
+
+% =====================================================================
+\section{Threats to Validity}\label{sec:threats}
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Domain mismatch.} \texttt{XES3G5M} is Chinese elementary math; Noxed is Arabic-language Egyptian school science. Difficulty/discrimination/prerequisite/learning-dynamics findings (NB01--NB06) are methodology validations, not directly transferable numbers.
+\item \textbf{Correctness-only proxy.} NB00 confirms response time, distractor choice, and cognitive load are absent from every file. All behavioural-metric results (NB07) are computed on a \emph{synthetic} population, not real logs --- they answer "is the metric design internally coherent and separable," not "does this classify real students correctly."
+\item \textbf{IRT tractability subsampling.} The 2PL fit (NB01) uses a documented, most-attempted-item/most-active-student subsample, not the full sparse response matrix; reported IRT parameters describe that subsample.
+\item \textbf{No logged bandit propensities.} The reward simulation (NB08) is a forward simulation over calibrated difficulty, not an off-policy evaluation against real bandit-served traffic; the OPE sketch is explicitly bounded to an in-sample reward-model check.
+\item \textbf{BKT identifiability.} $P(L_0)$ is a classically hard-to-identify BKT parameter; per-KC estimates should be interpreted with wider uncertainty than $P(T),P(S),P(G)$.
+\end{enumerate}
+
+% =====================================================================
+\section{Validation Plan (properties to test)}
+\begin{itemize}
+\item \textbf{Partitioning:} every clustered answer belongs to exactly one cluster.
+\item \textbf{Ranges:} behavioural scores, $P(L)$, and every $D$ variant $\in[0,1]$; $\Delta$mastery $\in[-1,1]$ (fuzz with Hypothesis).
+\item \textbf{Vocabulary:} every emitted treatment constraint is a member of the fixed treatment vocabulary.
+\item \textbf{Smoothness:} near-identical behavioural score vectors map to the same/very similar treatment plan.
+\item \textbf{Bandit safety:} the selected question is always inside the constraint-filtered candidate set.
+\item \textbf{Efficacy:} offline off-policy evaluation shows the policy beats a difficulty-only baseline before any live rollout (RQ6).
+\end{itemize}
+
+% =====================================================================
+\section{Data Strategy: Proxy, Cold Start, Synthesis}\label{sec:data}
+A verified survey of public datasets yields \textbf{three non-overlapping buckets}: (a) large knowledge-tracing logs with rich per-attempt metadata but \emph{no} behavioural labels; (b) small human-observed affect/behaviour corpora (BROMP lineage) that are log-linked but tiny; (c) webcam/video affect corpora with labels but \emph{no} response metadata. \textbf{No public dataset offers both scale and behavioural ground truth}, and \textbf{none matches Noxed's target} (Arabic $\times$ school-science $\times$ per-attempt logs).
+
+\smallskip
+\noindent\textbf{Proxy / transfer datasets (methodology only).} RT = response time, Att = attempts, Hint = hint use, KC = skill tags, Aff = affect labels.
+
+\par\nopagebreak
+\begin{tabularx}{\textwidth}{@{}p{3.2cm}Y ccccc@{}}
+\toprule
+\textbf{Dataset} & \textbf{Domain / size} & RT & Att & Hint & KC & Aff \\
+\midrule
+\texttt{XES3G5M} (current) & CN elem.\ math; 18{,}066 stu, 7{,}652 q, 865 KC, 5.55M int & $\sim$ & -- & -- & \checkmark\checkmark & -- \\
+ASSISTments 2012-13 \emph{+affect} & US math; 27K stu, 2.5M int & \checkmark & \checkmark & \checkmark & \checkmark & (pred.) \\
+ASSISTments 2017 & US math; clickstream, 942K rows & \checkmark & \checkmark & \checkmark & \checkmark & (pred.) \\
+EdNet KT1--KT4 (Riiid) & EN TOEIC; 784K stu, 131M int & \checkmark\checkmark & \checkmark & $\sim$ & \checkmark & -- \\
+Eedi / NeurIPS-2020 & UK math MCQ; $>$20M answers & -- & \checkmark & -- & \checkmark\checkmark & -- \\
+Junyi 2020 (2015) & TW math; 72K stu, 16M att & \checkmark & \checkmark & \checkmark & \checkmark & -- \\
+KDD Cup 2010 & US algebra; $\sim$30M steps & \checkmark & \checkmark & \checkmark & \checkmark & -- \\
+Squirrel AI ElemMath2021 & CN elem.\ math; 125K stu, difficulty+prereqs & \checkmark & \checkmark & -- & \checkmark & -- \\
+\bottomrule
+\end{tabularx}
+
+\smallskip
+\noindent\textbf{Closest to Noxed's domain: TIMSS Grade 4/8 \emph{science}} (IEA) --- \textbf{Egypt participates}, many Arabic countries included, item-level responses public, and eTIMSS adds response-time process data. It is cross-sectional assessment data (no hints/retries/sequences), so mine it for \emph{science-item content and difficulty realism}, and use a math KT log (EdNet / Junyi / ASSISTments) as the \emph{format \& behaviour} proxy. (PISA science is computer-based with time-on-task but Egypt does not take PISA.)
+
+\smallskip
+\noindent\textbf{Cold-start reality.} There is no Arabic, per-attempt, school-science tutoring dataset publicly available; moreover \emph{test anxiety} and \emph{impulsiveness} are not even standard observation categories (they come from self-report). Noxed must therefore:
+\begin{enumerate}[leftmargin=1.4em,itemsep=1pt]
+\item \textbf{Instrument its own game} from day one --- log response time, attempts, chosen distractor, lifeline/skip/answer-change events, and stress game-states.
+\item \textbf{Synthesise labelled behavioural scenarios} --- parametrised ``impulsive'' (short RT $+$ lure-distractor), ``anxious'' (RT inflation $+$ decay under pressure), ``slow-processor'', ``gamer'' (implausibly short RT $+$ wrong) students --- to pre-train the Behavioural NN.
+\item \textbf{Anchor weak supervision} on ASSISTments-with-affect ``silver'' labels and the BROMP/sensor-free-detector definitions, then validate a subset against a short Arabic-validated self-report (e.g.\ Cognitive Test Anxiety Scale).
+\end{enumerate}
+Item difficulty and BKT priors come from the \emph{static} formula (\S\ref{sec:difficulty}) until enough real responses accrue.
+
+% =====================================================================
+\section{Reusable Open-Source Landscape}
+\textbf{Knowledge tracing / mastery:} \texttt{pyBKT} (BKT priors \& mastery --- already in stack), \texttt{pyKT} and \texttt{EduKTM} (DKT/DKVMN/SAKT/AKT baselines), \texttt{py-fsrs}/\texttt{ebisu} (forgetting/review timing).\\
+\textbf{Adaptive tutor reference:} \texttt{OATutor} (open BKT-based ITS with a mastery$\rightarrow$selection loop --- closest architectural analog).\\
+\textbf{Contextual bandit (M3):} \texttt{contextualbandits} (David Cortes --- LinUCB \emph{plus} off-policy evaluation), \texttt{Vowpal Wabbit} (scale), \texttt{catsim}/\texttt{EduCAT} (information-theoretic CAT as a principled benchmark).\\
+\textbf{Item calibration:} \texttt{py-irt}, \texttt{girth}, \texttt{mirt} (difficulty/discrimination to seed the difficulty formula \& priors).\\
+\textbf{Behavioural (M2):} no turnkey library --- reuse the \emph{definitions} of wheel-spinning / gaming / carelessness detectors (Baker, Paquette, Beck) and \texttt{pyKT} auxiliary-task heads; train a custom PyTorch classifier. \emph{(Note: ``OATutor'', from the same lab as pyBKT, is the closest end-to-end open-source analog to Noxed's mastery$\rightarrow$selection loop.)}
+
+% =====================================================================
+\section*{References}
+\small
+\begin{enumerate}[leftmargin=1.5em,itemsep=0pt]
+\item Corbett, A.T.\ \& Anderson, J.R.\ (1995). Knowledge Tracing: Modeling the acquisition of procedural knowledge. \emph{UMUAI} 4(4), 253--278.
+\item Piech, C.\ et al.\ (2015). Deep Knowledge Tracing. \emph{NeurIPS} 28.
+\item Zhang, J.\ et al.\ (2017). Dynamic Key-Value Memory Networks for Knowledge Tracing. \emph{WWW}, 765--774.
+\item Ghosh, A., Heffernan, N.\ \& Lan, A.S.\ (2020). Context-Aware Attentive Knowledge Tracing (AKT). \emph{KDD}, 2330--2339.
+\item Baker, R.S.\ et al.\ (2008). Developing a generalizable detector of when students game the system. \emph{UMUAI} 18(3), 287--314.
+\item Beck, J.E.\ \& Gong, Y.\ (2013). Wheel-Spinning: students who fail to master a skill. \emph{AIED}, LNCS 7926, 431--440.
+\item San Pedro, M.O.Z., Baker, R.S.\ \& Rodrigo, M.M.T.\ (2011). Detecting carelessness through contextual estimation of slip probabilities. \emph{AIED}, 304--311.
+\item D'Mello, S.\ \& Graesser, A.\ (2012). Dynamics of affective states during complex learning. \emph{Learning \& Instruction} 22(2), 145--157.
+\item Ocumpaugh, J., Baker, R.S.\ \& Rodrigo, M.M.T.\ (2015). \emph{BROMP 2.0 Training Manual}.
+\item Cronbach, L.J.\ \& Snow, R.E.\ (1977). \emph{Aptitudes and Instructional Methods} (ATI). Irvington.
+\item Miyake, A.\ et al.\ (2000). The unity and diversity of executive functions. \emph{Cognitive Psychology} 41(1), 49--100. (See also Diamond, 2013, \emph{Annu.\ Rev.\ Psychol.} 64.)
+\item Cassady, J.C.\ \& Johnson, R.E.\ (2002). Cognitive test anxiety and academic performance. \emph{Contemp.\ Educ.\ Psychol.} 27(2), 270--295.
+\item Wise, S.L.\ \& Kong, X.\ (2005). Response-time effort: a measure of examinee motivation. \emph{Applied Measurement in Education} 18(2), 163--183.
+\item van der Linden, W.J.\ (2006/2007). Lognormal / hierarchical models of response times. \emph{JEBS} 31(2); \emph{Psychometrika} 72(3).
+\item Clement, B.\ et al.\ (2015). Multi-armed bandits for intelligent tutoring systems (ZPDES). \emph{JEDM} 7(2), 20--48.
+\item Settles, B.\ \& Meeder, B.\ (2016). A trainable spaced-repetition model (Half-Life Regression). \emph{ACL}, 1848--1858.
+\item Doroudi, S., Aleven, V.\ \& Brunskill, E.\ (2019). Where's the reward? RL for instructional sequencing. \emph{IJAIED} 29(4), 568--620.
+\item Bloom, B.S.\ (1984). The 2-sigma problem. \emph{Educational Researcher} 13(6), 4--16. \; Bjork, R.A.\ (1994). Desirable difficulties.
+\item Liu, Z.\ et al.\ (2023). \texttt{XES3G5M}: a knowledge-tracing benchmark with auxiliary information. \emph{NeurIPS Datasets \& Benchmarks}.
+\end{enumerate}
+
+\end{document}

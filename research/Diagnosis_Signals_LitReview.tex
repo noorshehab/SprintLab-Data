@@ -1,0 +1,138 @@
+\documentclass[10pt]{article}
+\usepackage[letterpaper,margin=0.72in]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{booktabs,array,tabularx,microtype,enumitem,titlesec,graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{newtxtext,newtxmath}
+
+\definecolor{ink}{HTML}{1A202C}
+\definecolor{accent}{HTML}{2B4C7E}
+\definecolor{good}{HTML}{276749}
+\definecolor{part}{HTML}{9C6B0B}
+\definecolor{weak}{HTML}{9B2C2C}
+\definecolor{rowg}{HTML}{F1F4F8}
+\color{ink}
+
+\titleformat{\section}{\bfseries\large\color{accent}}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\bfseries\normalsize\color{accent}}{}{0em}{}
+\titlespacing*{\section}{0pt}{6pt}{2pt}
+\titlespacing*{\subsection}{0pt}{4pt}{1pt}
+\setlist[itemize]{leftmargin=1.2em,itemsep=1pt,topsep=1pt}
+\newcommand{\Sup}{\textbf{\color{good}Supported}}
+\newcommand{\Par}{\textbf{\color{part}Partial}}
+\newcommand{\Weak}{\textbf{\color{weak}Weak}}
+\setlength{\parindent}{0pt}\setlength{\parskip}{2pt}
+\renewcommand{\arraystretch}{1.18}
+
+\newcolumntype{C}{>{\raggedright\arraybackslash}p{2.15cm}}
+\newcolumntype{S}{>{\raggedright\arraybackslash}p{3.15cm}}
+\newcolumntype{V}{>{\centering\arraybackslash}p{1.55cm}}
+\newcolumntype{G}{>{\raggedright\arraybackslash}p{3.5cm}}
+\newcolumntype{K}{>{\raggedright\arraybackslash}p{5.35cm}}
+% feasibility-verdict chips (page 3)
+\newcommand{\chip}[2]{\textbf{\color{#1}#2}}
+\newcommand{\Comp}{\chip{good}{COMPUTABLE}}
+\newcommand{\Proxy}{\chip{part}{PROXY-ONLY}}
+\newcommand{\NeedL}{\chip{weak}{NEEDS LATENCY}}
+\newcommand{\NeedT}{\chip{weak}{NEEDS TAGS}}
+\newcommand{\NeedM}{\chip{weak}{NEEDS MULTI-SUBJECT}}
+\newcommand{\NeedE}{\chip{weak}{NEEDS GAME EVENTS}}
+
+\begin{document}
+\begin{center}
+{\LARGE\bfseries\color{accent} Diagnosing the Problem Itself: Behavioural Signals in the Sprintlab LIS}\\[2pt]
+{\large A psychological-perspective literature review of Framework Sections 4--6}\\[3pt]
+{\footnotesize\itshape Question of record: ``How do we find the problems themselves (diagnosis), and what are the signals?'' \;$\bullet$\; Scope: the 12 non-content constructs in \S4 Cognitive Skills, \S5 Exam Skills, \S6 Psychological \& Behavioural Patterns \;$\bullet$\; XES3G5M used as proxy only.}
+\end{center}
+\vspace{-2pt}\hrule\vspace{4pt}
+
+\section{The question, and why a literature review}
+Two students can give the \emph{identical} wrong answer for different reasons --- never learned it, knew it but rushed, misread it, or hold a confident misconception. Accuracy alone cannot separate these; only \emph{behavioural} signals (response time, error \emph{pattern}, response to game events) can. The Master Framework already asserts one detection rule per construct, but flags every rule as an unvalidated hypothesis (\S9--\S10). This review therefore asks the prior, reviewer's question for each of the 12 constructs: \textbf{is the asserted signal grounded in the psychology / cognitive-science / learning-analytics literature, and can it actually be measured?} Each construct receives a verdict --- \Sup, \Par, or \Weak\ --- the seminal grounding, and the dominant confound the literature warns about.
+
+\textbf{Sub-questions (per construct).} \;\textbf{SQ1} What is the construct and how does psychology measure it?\; \textbf{SQ2} Is the Framework's proposed telemetry signal valid?\; \textbf{SQ3} What confound must be controlled to keep it separable from plain not-knowing? \;\;\textbf{Cross-cutting:} \textbf{SQ4} trait vs.\ state; \textbf{SQ5} what does our data actually permit?
+\vspace{-1pt}
+
+\section{Findings I --- Cognitive Skills (\S4): raw processing capacity}
+\newcommand{\hd}{\rowcolor{accent}\color{white}}
+{\footnotesize
+\begin{tabularx}{\textwidth}{CSVGK}
+\hd \textbf{Construct} & \textbf{Framework signal} & \textbf{Verdict} & \textbf{Seminal grounding} & \textbf{Dominant confound \& the fix} \\
+\midrule
+Working Memory & Collapses on high-load items (load 4--5) but not low-load, same cluster & \Par & Baddeley \& Hitch 1974; Cowan 2001 ($\approx$4 chunks); Sweller 1988 (element interactivity) & High-load items are also \emph{harder} and more knowledge-demanding; expert schemas chunk load away. \emph{Hold content mastery constant across load levels.} \\
+\rowcolor{rowg} Processing Speed & Accurate but RT near the max even on items answered correctly & \Weak & Salthouse 1996; Kail 1991 & Framework also predicts ``errors rise'' --- that is a speed--accuracy trade-off, not pure slowness. \emph{Clean signal = slow \textbf{and correct} on an easy, already-mastered item.} \\
+Selective / Sustained Attention & Errors when a distractor tile is present (selective); accuracy decays over the last items (sustained) & \Sup\newline\Weak & Posner \& Petersen 1990; Eriksen \& Eriksen 1974 (flanker); Mackworth 1948; Robertson 1997 (SART) & Selective is a valid flanker analogue \emph{if the distractor is truly irrelevant}. Vigilance decrement needs 20+\,min of monotony --- a 10-item match instead shows rushing / difficulty-order. \emph{De-confound position from difficulty.} \\
+\rowcolor{rowg} Cognitive Flexibility & Accuracy/RT drop after a \emph{subject} switch (chemistry$\to$physics) & \Weak & Miyake et al.\ 2000 (shifting); Rogers \& Monsell 1995 (switch cost); Diamond 2013 & In the literature the ``task set'' is the S--R rule, not the academic subject; a subject change likely measures knowledge-set \emph{restart cost}, not executive shifting. \emph{Vary the required operation, hold subject constant.} \\
+\end{tabularx}}
+\vspace{-2pt}
+
+\section{Findings II --- Exam Skills (\S5): tactical test-taking}
+{\footnotesize
+\begin{tabularx}{\textwidth}{CSVGK}
+\hd \textbf{Construct} & \textbf{Framework signal} & \textbf{Verdict} & \textbf{Seminal grounding} & \textbf{Dominant confound \& the fix} \\
+\midrule
+Question Interpretation \& Reading & Picks the reading-trap distractor at \emph{fast}-to-average RT & \Par & Millman, Bishop \& Ebel 1965 (test-wiseness); Messick 1989 (construct-irrelevant variance); Clark \& Chase 1972 (negation cost) & Fast\,+\,trap is equally the signature of rapid guessing / low effort. \emph{Isolate reading via the same student's plain-vs.-language-challenging gap on matched content.} \\
+\rowcolor{rowg} Time Management \& Perfectionism & (a) high timeout rate; (b) 90\% of time on an easy item & (a)\,\Sup\ (b)\,\Weak & Wise \& Kong 2005 (RT effort); Schnipke \& Scrams 1997 (speededness); Frost et al.\ 1990 (perfectionism) & Timeout also = difficulty / slow speed. ``Easy'' is population-level, not per-student. \emph{Norm dwell to the student; slow-\textbf{correct} (checking) vs.\ slow-\textbf{wrong} (difficulty) is the disambiguator.} \\
+Reasoning & Fails short high-logical-step items but solves data-heavy low-step ones & \Par & Carroll 1993 / Cattell--Horn $Gf$; Halford et al.\ 1998 (relational complexity); Frederick 2005 (CRT) & Relational complexity is \emph{defined} via processing capacity, so it is entangled with working memory. \emph{RT splits it: engaged-but-wrong (slow) = $Gf$ ceiling; fast-wrong = reflection failure.} \\
+\end{tabularx}}
+\vspace{-2pt}
+
+\section{Findings III --- Psychological \& Behavioural Patterns (\S6): pressure responses}
+{\footnotesize
+\begin{tabularx}{\textwidth}{CSVGK}
+\hd \textbf{Construct} & \textbf{Framework signal} & \textbf{Verdict} & \textbf{Seminal grounding} & \textbf{Dominant confound \& the fix} \\
+\midrule
+Impulsiveness & Picks the intuitive trick-lure in $<$30\% of theoretical time & \Sup & Kagan 1966 (reflection--impulsivity, MFFT); Frederick 2005 (CRT lure); Patton, Stanford \& Barratt 1995 (BIS-11) & Kagan's own signature is exactly short-latency\,$\times$\,error. Fast-wrong also fits low effort. \emph{Require the error to be the \textbf{specific lure}; 30\% is arbitrary --- normalise to the person.} \\
+\rowcolor{rowg} Stress \& Overthinking & After a game trigger: wrong easy answer, or RT $>$150\% of own norm & \Par & Liebert \& Morris 1967 (worry vs.\ emotionality); Cassady \& Johnson 2002; Eysenck et al.\ 2007 (Attentional Control Theory) & Event-gating is correct (state anxiety is trigger-bound); RT-inflation matches ACT's efficiency cost, but also indexes careful reflection. \emph{Trigger\,+\,RT-inflation\,+\,accuracy \textbf{preserved} = worry, not tilt.} \\
+Low Self-Efficacy & Switches final answer \emph{away} from an initially-correct one & \Weak & Bandura 1997; Benjamin et al.\ 1984; Kruger, Wirtz \& Miller 2005 & The base rate of answer-changes is wrong$\to$right (adaptive); the correct$\to$wrong tail is rare and noisy. \emph{Need a repeated pattern, strict ``no new information,'' and fast/uncertain reversals --- never a one-shot flag.} \\
+\rowcolor{rowg} Low Effort / Motivation & Flat, fast RT regardless of difficulty; disengaged from optional mechanics & \Sup & Wise \& Kong 2005 (response-time effort); Baker et al.\ 2004 (gaming / off-task) & Genuine effort makes RT \emph{scale} with difficulty, so flat-fast is a strong marker --- but flat-fast\,+\,\emph{high} accuracy is mastery. \emph{Require low/chance accuracy before flagging.} \\
+Low Frustration Tolerance (Tilt) & Post-negative-event performance drops and does not recover in-match & \Par & D'Mello \& Graesser 2012 (affect dynamics); Rabbitt 1966 (post-error slowing); \emph{esports tilt}, CHI 2021 & A single post-event dip is \emph{adaptive} (post-error slowing improves the next answer). \emph{Only sustained non-recovery over a multi-item window is tilt; separate RT-up/acc-up from acc-down.} \\
+\end{tabularx}}
+\vspace{-1pt}
+
+\section{Cross-cutting findings}
+\textbf{SQ3 --- one confound dominates all twelve.} Response time and accuracy are jointly driven by \emph{whether the student knows the material}: a student who simply doesn't know the answer looks slow, error-prone, distractible, ``inflexible,'' and ``stressed'' at once. The literature neutralises this four ways, and all four should be design constraints for the LIS: (1) \textbf{within-student contrasts} --- each student is their own baseline (this is exactly the Framework's Personal Pace Factor, \S7.1); (2) \textbf{hold content \& difficulty constant} while varying only the cognitive/tactical demand; (3) \textbf{condition on correctness} (analyse RT on correct responses only) and calibrate difficulty via IRT; (4) \textbf{jointly model speed \& ability} (van der Linden 2007). This is the psychometric backing for the Framework's Trait-vs-State test and Funnel (\S7.3).
+
+\textbf{SQ4 --- trait vs.\ state sets the required evidence window.} \emph{Impulsiveness} and \emph{Low Self-Efficacy} are stable \textbf{traits}: reliable only when accumulated across many items/sessions --- matching the Framework's \emph{Confirmed} tier (100+\,Qs), and a single event is weak evidence. \emph{Stress} and \emph{Tilt} are transient \textbf{states}, validly read from tightly time-locked pre/post-trigger contrasts --- so the Framework's event-gating is methodologically correct. \emph{Low Effort} is mixed (a match-level state that becomes dispositional if chronic). Reading a trait from one state-like event is the framework's central measurement risk.
+
+\textbf{SQ5 --- the proxy data cannot see most of these signals (evidence: companion notebook).} Nearly every \S4--6 signal is timing-based, yet XES3G5M has \textbf{no per-item latency}: 78.7\% of responses share a timestamp with another and 58\% of consecutive answers are $\Delta t=0$ --- timestamps are session/batch-level. Consequently only \textbf{2 of 12} constructs are even weakly observable on the proxy (sustained attention: a small monotone $0.825\!\to\!0.812$ accuracy decay over 10 items; a weak cognitive-load$\to$difficulty trend). The subject-switch penalty is $\approx$0 because the proxy is single-domain math; distractor/trick and game-event signals need tags and event logs that do not exist in the logs.
+
+\section{Recommendation --- what Sprintlab must instrument}
+For 10 of 12 constructs the blocker is missing \emph{data}, not diagnostic logic. Ranked by constructs unlocked: \;\textbf{(1) per-item response latency} (unlocks Processing Speed, Time Management, Low Effort, Impulsiveness, Stress, Reading); \;\textbf{(2) chosen-option + offline LLM distractor tags} (Impulsiveness, Reading traps, Misconception attribution); \;\textbf{(3) in-game event log} --- triggers, attacks, distractor tiles (Selective Attention, Stress, Tilt); \;\textbf{(4) answer-change events} (Low Self-Efficacy); \;\textbf{(5) Variables\_Count \& Logical\_Steps tags} (WM vs.\ Reasoning split); \;\textbf{(6) multi-subject interleaving} (Cognitive Flexibility). Every timing threshold (the 30\%, 90\%, 150\% rules) must then be re-expressed as a within-student, per-load, grade-band-calibrated contrast before any diagnosis is trusted --- none is defensible as a raw population cutoff.
+
+\newpage
+\section{Findings IV --- can our data even see these signals? (companion notebook)}
+The diagnosis question has a data half: a signal we cannot compute is not a diagnosis. The audit below runs every \S4--6 signal against the real proxy (XES3G5M: 5.14\,M responses, 14\,453 students). \textbf{Only 2 of 12 constructs are observable}, and the gap is almost always \emph{missing telemetry}, not missing logic.
+
+{\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.75cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{4.35cm}}
+\hd \textbf{Construct} & \textbf{What the signal fundamentally requires} & \textbf{Verdict on XES3G5M} \\
+\midrule
+Sustained Attention & within-session position $\times$ accuracy & \Comp\ \emph{(shown: 0.825$\to$0.812)} \\
+\rowcolor{rowg} Working Memory & per-item load index $\times$ accuracy & \Proxy\ \emph{(weak \#KC trend)} \\
+Reasoning & Logical\_Steps tag $\times$ accuracy & \Proxy \\
+Processing Speed & per-item latency + time-pressure tag & \NeedL \\
+Time Management & per-item latency + timeout events & \NeedL \\
+\rowcolor{rowg} Low Effort / Motivation & per-item latency + engagement events & \NeedL \\
+Impulsiveness & trick/distractor tags + latency & \NeedT \\
+Question Interpretation & reading-trap distractor tags + latency & \NeedT \\
+\rowcolor{rowg} Selective Attention & in-game distractor-tile events & \NeedE \\
+Stress \& Overthinking & game-state triggers + latency & \NeedE \\
+Low Self-Efficacy & answer-change (initial vs.\ final) events & \NeedE \\
+\rowcolor{rowg} Cognitive Flexibility & multi-subject interleaving in the stream & \NeedM\ \emph{(penalty $\approx$0 on math-only proxy)} \\
+\end{tabularx}}
+
+\vspace{4pt}
+\begin{center}
+\includegraphics[width=0.485\textwidth]{../notebooks/outputs/figures/timestamp_granularity.png}\hfill
+\includegraphics[width=0.485\textwidth]{../notebooks/outputs/figures/sustained_attention.png}
+\end{center}
+\vspace{-4pt}
+{\footnotesize\textbf{Left --- the fatal gap.} XES3G5M \texttt{timestamps} are batched, not per-item: 78.7\% of responses share their timestamp with another and 58\% of consecutive answers have $\Delta t = 0$. No trustworthy per-item solving time can be recovered, which is why every timing-based signal (the majority of \S4--6) is un-testable here. \textbf{Right --- the one clean proxy signal.} Accuracy falls monotonically across a session (a sustained-attention analogue), but the effect is small ($1.3$\,pp) because the proxy is untimed and non-competitive; the true in-game decrement is expected to be larger and must be measured on target data.}
+
+\vspace{3pt}
+\textbf{Implication for the build.} The proxy is strong for \emph{content} diagnosis (clean learning and differentiation curves) and structurally silent on \emph{behavioural} diagnosis --- exactly the \S4--6 target. Behavioural signals therefore cannot be validated on borrowed knowledge-tracing data; they require Sprintlab's own instrumentation (\S6 above), after which the thresholds must be re-calibrated per student and grade band before any label is trusted. \emph{Full reproduction: \texttt{notebooks/signal\_feasibility\_audit.ipynb}.}
+
+{\scriptsize\vspace{4pt}\hrule\vspace{2pt}
+\textbf{Key sources.} Baddeley \& Hitch (1974); Cowan (2001); Engle (2002); Sweller (1988); Salthouse (1996); Kail (1991); Posner \& Petersen (1990); Eriksen \& Eriksen (1974); Mackworth (1948); Robertson et al.\ (1997); Miyake et al.\ (2000); Rogers \& Monsell (1995); Diamond (2013); Millman, Bishop \& Ebel (1965); Messick (1989); Clark \& Chase (1972); Wise \& Kong (2005); Schnipke \& Scrams (1997); Frost et al.\ (1990); Carroll (1993); Halford et al.\ (1998); Frederick (2005); Kagan (1966); Patton, Stanford \& Barratt (1995); Liebert \& Morris (1967); Cassady \& Johnson (2002); Eysenck et al.\ (2007); Bandura (1997); Benjamin et al.\ (1984); Kruger, Wirtz \& Miller (2005); Baker et al.\ (2004); D'Mello \& Graesser (2012); Rabbitt (1966); van der Linden (2007). \emph{Citations verified for author/year/venue; DOIs and effect sizes deliberately not asserted.}}
+
+\end{document}

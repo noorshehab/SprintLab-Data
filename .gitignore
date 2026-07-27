@@ -30,6 +30,7 @@ mlflow_artifacts/
 *.params
 *.tags
 *.proto
+mlflow/
 
 # Jupyter notebooks
 .ipynb_checkpoints/

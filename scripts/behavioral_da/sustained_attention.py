@@ -151,11 +151,13 @@ worst_pen=sustained_attention[sustained_attention['a_quartile']=='Q1']
 mean=worst_pen['avg_window_before_increase'].mean()
 std=worst_pen['avg_window_before_increase'].std()
 median=worst_pen['avg_window_before_increase'].median()
+count=len(worst_pen)
 
 statistics={
     "mean": mean,
     "std": std,
-    "median": median
+    "median": median,
+    "count":count
 }
 
 stats_path = os.path.join(results_path,'sustained_attention_statistics.csv')

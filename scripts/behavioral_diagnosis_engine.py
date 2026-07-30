@@ -19,7 +19,6 @@ def CI(delta,diagnosis_mean,diagnosis_std,n,confidence=0.75):
     return delta < ci_upper
 
 
-
 #functions that calculate the deltas
 #reasoning
 def reasoning(df):

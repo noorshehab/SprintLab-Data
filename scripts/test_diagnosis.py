@@ -5,9 +5,15 @@ import scipy.stats as stats
 from dotenv import load_dotenv
 from behavioral_diagnosis_engine import diagnosis
 from sklearn.metrics import accuracy_score, precision_score, recall_score,confusion_matrix
+import mlflow
+import dagshub
+import json
 import matplotlib.pyplot as plt
 import seaborn as sns
 load_dotenv()
+
+output_path=os.getenv('EXPERIMENT_OUTPUTS')
+dagshub.init(repo_owner='nhatemshehab', repo_name='SprintLab-Data', mlflow=True)
 
 def prepare_test_set():
     #load the test set
@@ -85,59 +91,59 @@ def prepare_test_set():
 
 
 #prepare dataset
-test_set=prepare_test_set()
-print(test_set.head())
-print(test_set['uid'].nunique())
+with mlflow.start_run():
+    test_set=prepare_test_set()
+    ground_truth = (
+        test_set.groupby('uid')
+        .apply(diagnosis)
+        .reset_index()
+    )
 
-ground_truth = (
-    test_set.groupby('uid')
-    .apply(diagnosis)
-    .reset_index()
-)
+    first_100 = test_set.sort_values(['uid', 'timestamps']).groupby('uid').head(100).reset_index(drop=True)
+    f100_diagnosis= (
+        first_100.groupby('uid')
+        .apply(diagnosis)
+        .reset_index())
 
-first_100 = test_set.sort_values(['uid', 'timestamps']).groupby('uid').head(100).reset_index(drop=True)
-f100_diagnosis= (
-    first_100.groupby('uid')
-    .apply(diagnosis)
-    .reset_index())
+    merged = ground_truth.merge(
+        f100_diagnosis,
+        on='uid',
+        suffixes=('_gt', '_f100')
+    )
 
-merged = ground_truth.merge(
-    f100_diagnosis,
-    on='uid',
-    suffixes=('_gt', '_f100')
-)
+    metrics = []
+    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+        y_true = merged[f'{diag}_diag_gt']
+        y_pred = merged[f'{diag}_diag_f100']
+        mlflow.log_metric(f'{diag}_accuracy', accuracy_score(y_true, y_pred))
+        mlflow.log_metric(f'{diag}_precision', precision_score(y_true, y_pred, zero_division=0))
+        mlflow.log_metric(f'{diag}_recall', recall_score(y_true, y_pred, zero_division=0))
 
-metrics = []
-for diag in ['attention', 'reasoning', 'language', 'flexibility']:
-    y_true = merged[f'{diag}_diag_gt']
-    y_pred = merged[f'{diag}_diag_f100']
 
-    metrics.append({
-        'diagnosis': diag,
-        'accuracy': accuracy_score(y_true, y_pred),
-        'precision': precision_score(y_true, y_pred, zero_division=0),
-        'recall': recall_score(y_true, y_pred, zero_division=0),
-    })
+    metrics_df = pd.DataFrame(metrics)
+    print(metrics_df.round(4))
 
-metrics_df = pd.DataFrame(metrics)
-print(metrics_df.round(4))
+    #confusion matrices
+    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+        y_true = merged[f'{diag}_diag_gt']
+        y_pred = merged[f'{diag}_diag_f100']
 
-#confusion matrices
-for diag in ['attention', 'reasoning', 'language', 'flexibility']:
-    y_true = merged[f'{diag}_diag_gt']
-    y_pred = merged[f'{diag}_diag_f100']
+        cm = confusion_matrix(y_true, y_pred)
 
-    cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(6, 4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['No Diagnosis', 'Diagnosis'], yticklabels=['No Diagnosis', 'Diagnosis'])
-    plt.title(f'Confusion Matrix for {diag.capitalize()} Diagnosis')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-    plt.show()
-    #plt.savefig(f'confusion_matrix_{diag}.png')
+        #plot confusion matrix heatmap
+        plt.figure(figsize=(6, 4))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['No Diagnosis', 'Diagnosis'], yticklabels=['No Diagnosis', 'Diagnosis'])
+        plt.title(f'Confusion Matrix for {diag.capitalize()} Diagnosis')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        fig_path=os.path.join(output_path,f'confusion_matrix_{diag}.png')
+        plt.savefig(fig_path)
 
-#correlation between f_100 delta and ground truth delta
-for diag in ['attention', 'reasoning', 'language', 'flexibility']:
-    correlation = merged[f'{diag}_gt'].corr(merged[f'{diag}_f100'])
-    print(f'Correlation between ground truth and first 100 delta for {diag}: {correlation:.4f}')
- 
+        #save figures to mlflow as artifacts 
+        mlflow.log_artifact(fig_path)
+
+    #correlation between f_100 delta and ground truth delta
+    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+        correlation = merged[f'{diag}_gt'].corr(merged[f'{diag}_f100'])
+        mlflow.log_metric(f'{diag}_correlation', correlation)
+        

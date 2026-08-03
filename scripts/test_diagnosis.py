@@ -24,9 +24,6 @@ def prepare_test_set():
     # (edited by mostafa nashaat reason: fix crash by renaming the column to what the original script expected)
     if 'super_topic_ids' not in question_metadata.columns and 'kc_ids' in question_metadata.columns:
         question_metadata.rename(columns={'kc_ids': 'super_topic_ids'}, inplace=True)
-        import ast
-        question_metadata['super_topic_ids'] = question_metadata['super_topic_ids'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
-        
     #calculate the necessary scores and quartiles and add them to q metadata
     # add supertopic
 

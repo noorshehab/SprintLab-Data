@@ -3,7 +3,7 @@ import pandas as pd
 import os 
 import scipy.stats as stats
 from dotenv import load_dotenv
-from behavioral_diagnosis_engine import diagnosis
+from behavioral_diagnosis_engine import diagnosis, LOW_WORSENING_QUANTILE
 from sklearn.metrics import accuracy_score, precision_score, recall_score,confusion_matrix
 import mlflow
 import dagshub
@@ -85,6 +85,24 @@ def prepare_test_set():
     on='question_id',
     how='left'
     )
+    #add the easy-question metadata the effort index needs.
+    #level_1_qs.csv carries both worsening_rate and avg_baseline, so it is the only
+    #extra file required: worsening_rate defines which questions count as "easy",
+    #avg_baseline is the cohort error rate the student is scored against.
+    level_1_qs=pd.read_csv(os.getenv('LEVEL_1_QS_PATH'),
+                           usecols=['questions','worsening_rate','avg_baseline'])
+
+    tau=level_1_qs['worsening_rate'].quantile(LOW_WORSENING_QUANTILE)
+    level_1_qs['is_easy']=(level_1_qs['worsening_rate']<=tau).astype(int)
+
+    responses=responses.merge(
+    level_1_qs[['questions','avg_baseline','is_easy']],
+    on='questions',
+    how='left'
+    )
+    #anything not in level_1_qs is not Level-1, so not an easy question
+    responses['is_easy']=responses['is_easy'].fillna(0).astype(int)
+
     responses['error']=1-responses['responses']
     return responses
 
@@ -112,7 +130,7 @@ with mlflow.start_run():
     )
 
     metrics = []
-    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+    for diag in ['attention', 'reasoning', 'language', 'flexibility', 'effort']:
         y_true = merged[f'{diag}_diag_gt']
         y_pred = merged[f'{diag}_diag_f100']
         mlflow.log_metric(f'{diag}_accuracy', accuracy_score(y_true, y_pred))
@@ -124,7 +142,7 @@ with mlflow.start_run():
     print(metrics_df.round(4))
 
     #confusion matrices
-    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+    for diag in ['attention', 'reasoning', 'language', 'flexibility', 'effort']:
         y_true = merged[f'{diag}_diag_gt']
         y_pred = merged[f'{diag}_diag_f100']
 
@@ -143,7 +161,7 @@ with mlflow.start_run():
         mlflow.log_artifact(fig_path)
 
     #correlation between f_100 delta and ground truth delta
-    for diag in ['attention', 'reasoning', 'language', 'flexibility']:
+    for diag in ['attention', 'reasoning', 'language', 'flexibility', 'effort']:
         correlation = merged[f'{diag}_gt'].corr(merged[f'{diag}_f100'])
         mlflow.log_metric(f'{diag}_correlation', correlation)
         

@@ -6,7 +6,11 @@ import scipy.stats as stats
 parameters={'reasoning':{'mean':-0.1933,'std':0.0705,'count':2891},
             'language':{'mean':-0.1668,'std':0.0673,'count':2891},
             'attention_span':{'mean':2.679,'std':0.546,'count':2891},
-            'flexibility':{'mean':-0.0705,'std':0.0322,'count':2891}
+            'flexibility':{'mean':-0.0705,'std':0.0322,'count':2891},
+            # (edited by mostafa nashaat reason: adding frustration threshold parameters using 2nd pass logic on train set)
+            'frustration':{'mean':-0.2943,'std':0.0432,'count':1736},
+            # (edited by mostafa nashaat reason: adding working memory threshold parameters on train set)
+            'working_memory':{'mean':-0.2232,'std':0.0479,'count':959}
         }
 
 def CI(delta,diagnosis_mean,diagnosis_std,n,confidence=0.75):
@@ -92,8 +96,42 @@ def attention(df):
     return attn_span
 
 #effort
-#frustration 
+# (edited by mostafa nashaat reason: function to calculate frustration delta using isolated mistake logic)
+def frustration_delta(df):
+    df = df.sort_values('timestamps').reset_index(drop=True)
+    errors = df['error'].values
+    window_size = 3
+    deltas = []
+    
+    for i in range(len(errors)):
+        if errors[i] == 1 and (i == 0 or errors[i-1] == 0):
+            start_idx = max(0, i - window_size)
+            end_idx = min(len(errors), i + 1 + window_size)
+
+            before_mistake = errors[start_idx : i]
+            after_mistake = errors[i + 1 : end_idx]
+
+            if len(before_mistake) > 0 and len(after_mistake) > 0:
+                eb = np.mean(before_mistake)
+                ea = np.mean(after_mistake)
+                deltas.append(eb - ea)
+
+    if not deltas:
+        return np.nan
+    return np.mean(deltas)
+
 #cognitive load/working memory
+# (edited by mostafa nashaat reason: calculate working memory delta)
+def working_memory_delta(df):
+    if 'is_high_wm' not in df.columns:
+        return np.nan
+    error_high = df[df['is_high_wm'] == True]['error'].mean()
+    error_reg = df[df['is_high_wm'] == False]['error'].mean()
+    
+    if pd.isna(error_high) or pd.isna(error_reg):
+        return np.nan
+        
+    return error_reg - error_high
 
 #diagnosis function: inputs-> student responses  
 
@@ -104,12 +142,18 @@ def diagnosis(df):
     language_delta=language(df)
     switch_delta=switch(df)
     attention_delta=attention(df)
+    # (edited by mostafa nashaat reason: use frustration_delta and working_memory_delta functions)
+    frustration_val=frustration_delta(df)
+    working_memory_val=working_memory_delta(df)
 
     #tests
     reasoning_test=CI(reasoning_delta,parameters['reasoning']['mean'],parameters['reasoning']['std'],parameters['reasoning']['count'])
     language_test=CI(language_delta,parameters['language']['mean'],parameters['language']['std'],parameters['language']['count'])
     switch_test=CI(switch_delta,parameters['flexibility']['mean'],parameters['flexibility']['std'],parameters['flexibility']['count'])
     attention_test=CI(attention_delta,parameters['attention_span']['mean'],parameters['attention_span']['std'],parameters['attention_span']['count'])  
+    # (edited by mostafa nashaat reason: add frustration and working memory test to diagnosis)
+    frustration_test=CI(frustration_val,parameters['frustration']['mean'],parameters['frustration']['std'],parameters['frustration']['count'])
+    working_memory_test=CI(working_memory_val,parameters['working_memory']['mean'],parameters['working_memory']['std'],parameters['working_memory']['count'])
 
     diagnoses=[]
     if reasoning_test:
@@ -120,8 +164,13 @@ def diagnosis(df):
         diagnoses.append('flexibility')
     if attention_test:
         diagnoses.append('attention_span')
+    # (edited by mostafa nashaat reason: add frustration and working memory diagnosis)
+    if frustration_test:
+        diagnoses.append('frustration')
+    if working_memory_test:
+        diagnoses.append('working_memory')
 
-
-    return pd.Series({'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,
-                      'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test
+    # (edited by mostafa nashaat reason: add frustration and working memory results to returned series)
+    return pd.Series({'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,
+                      'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
                       ,'diagnoses':diagnoses})

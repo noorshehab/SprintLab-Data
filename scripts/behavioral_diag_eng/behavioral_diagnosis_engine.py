@@ -36,7 +36,6 @@ def reasoning(df):
     return delta
     
 
-
 #language difficulty
 def language(df):
     q1=df[df['language_difficulty_quartile']=='Q1']

@@ -1,9 +1,11 @@
+import ast
+
 import numpy as np
 import pandas as pd
 import os 
 import scipy.stats as stats
 from dotenv import load_dotenv
-from behavioral_diagnosis_engine import diagnosis
+from services.behavioral_diagnosis.behavioral_diagnosis import diagnosis
 from sklearn.metrics import accuracy_score, precision_score, recall_score,confusion_matrix
 import mlflow
 import dagshub
@@ -20,18 +22,18 @@ def prepare_test_set():
     responses=pd.read_csv(os.getenv('TEST_SET'))
     #load the question metadata
     question_metadata=pd.read_csv(os.getenv('QUESTION_METADATA_PATH'))
-    
-    # (edited by mostafa nashaat reason: fix crash by renaming the column to what the original script expected)
-    if 'super_topic_ids' not in question_metadata.columns and 'kc_ids' in question_metadata.columns:
-        question_metadata.rename(columns={'kc_ids': 'super_topic_ids'}, inplace=True)
-    #calculate the necessary scores and quartiles and add them to q metadata
-    # add supertopic
 
+    #parse super_topic_ids from string to list (stored as "[56]" in csv)
+    question_metadata['super_topic_ids'] = question_metadata['super_topic_ids'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+    )
+    
     responses=pd.merge(
     responses,question_metadata[['question_id','super_topic_ids']],
    left_on='questions',right_on='question_id',
    how='left' 
     )
+    print(responses.head())
 
     #add language difficulty and quartile
     question_metadata['ql_z']=stats.zscore(question_metadata['question_length'])

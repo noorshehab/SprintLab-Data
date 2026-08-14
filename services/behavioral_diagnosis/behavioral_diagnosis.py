@@ -10,7 +10,10 @@ parameters={'reasoning':{'mean':-0.1933,'std':0.0705,'count':2891},
             # (edited by mostafa nashaat reason: adding frustration threshold parameters using 2nd pass logic on train set)
             'frustration':{'mean':-0.2943,'std':0.0432,'count':1736},
             # (edited by mostafa nashaat reason: adding working memory threshold parameters on train set)
-            'working_memory':{'mean':-0.2232,'std':0.0479,'count':959}
+            'working_memory':{'mean':-0.2232,'std':0.0479,'count':959},
+            'processing_speed':{'mean':-0.1226,'std':0.0782,'count':2885},
+            'time_management':{'UTM_to_STM_ratio':1.5},
+            'stress':{'stress_ratio':2.0}
         }
 
 def CI(delta,diagnosis_mean,diagnosis_std,n,confidence=0.75):
@@ -22,26 +25,55 @@ def CI(delta,diagnosis_mean,diagnosis_std,n,confidence=0.75):
 
     return delta < ci_upper
 
+def test_threshold(metric,threshold):
+    if metric > threshold:
+        return True
+    return False
+
+def stress(df):
+    stress_conditions=df[df['stress_triggers']>0]
+    no_stress_conditions=df[df['stress_triggers']==0]
+    return stress_conditions['error'].mean()/no_stress_conditions['error'].mean() if no_stress_conditions['error'].mean()>0 else np.nan
+
 
 #functions that calculate the deltas
+def processing_speed(df):
+    time_pressure=df[df['time_pressure']==1]
+    no_time_pressure=df[df['time_pressure']==0]
+
+    delta=time_pressure['error'].mean()-no_time_pressure['error'].mean()
+
+    return delta
+
+def time_management(df):
+    under_recommended_time=df[df['response_time']<df['time']]
+    delta=abs(under_recommended_time['response_time']-under_recommended_time['time'])
+    stm=(delta*under_recommended_time['response']).sum()
+    utm=(delta*under_recommended_time['error']).sum()
+
+    return{
+        'stm':stm,
+        'utm':utm,
+        'ratio':utm/stm if stm>0 else np.nan
+    }
 #reasoning
 def reasoning(df):
-    q1=df[df['reasoning_quartile']=='Q1']
+    q1=df[df['reasoning_level']=='Q1']
     q1_error=q1['error'].mean()
 
-    q4=df[df['reasoning_quartile']=='Q4']
+    q4=df[df['reasoning_level']=='Q4']
     q4_error=q4['error'].mean()
 
     delta= q1_error-q4_error
     return delta
-    
 
+    
 #language difficulty
 def language(df):
-    q1=df[df['language_difficulty_quartile']=='Q1']
+    q1=df[df['language_level']=='Q1']
     q1_error=q1['error'].mean()
 
-    q4=df[df['language_difficulty_quartile']=='Q4']
+    q4=df[df['language_level']=='Q4']
     q4_error=q4['error'].mean()
 
     delta=q1_error-q4_error
@@ -51,32 +83,33 @@ def language(df):
 #cognitive flexibility
 def switch(df):
     df = df.sort_values('timestamps').reset_index(drop=True)
-    df['next_supertopics'] = df['super_topic_ids'].shift(-1)
+    df['next_unit'] = df['unit'].shift(-1)
     df['next_error'] = df['error'].shift(-1)
-    
-    # Check switch (no overlap)
-    def check_switch(current_topics, next_topics):
-        if not isinstance(current_topics, list) or not isinstance(next_topics, list):
+
+    # Check switch (unit changed)
+    def check_switch(current_unit, next_unit):
+        if current_unit is None or pd.isna(current_unit):
             return np.nan
-        if len(current_topics) == 0 or len(next_topics) == 0:
+        if next_unit is None or pd.isna(next_unit):
             return np.nan
-        return 1 if len(set(current_topics) & set(next_topics)) == 0 else 0
-    
+        return 1 if current_unit != next_unit else 0
+
     df['is_switch'] = df.apply(
-        lambda row: check_switch(row['super_topic_ids'], row['next_supertopics']),
+        lambda row: check_switch(row['unit'], row['next_unit']),
         axis=1
     )
-    
+
     # Filter to valid transitions
-    df_valid = df[df['next_supertopics'].notna()]
+    df_valid = df[df['next_unit'].notna()]
     if len(df_valid) == 0:
         return np.nan
-    
-    switch_error = df_valid[df_valid['is_switch'] == 1]['error'].mean()
-    stay_error = df_valid[df_valid['is_switch'] == 0]['error'].mean()
-    
+
+    switch_error = df_valid[df_valid['is_switch'] == 1]['next_error'].mean()
+    stay_error = df_valid[df_valid['is_switch'] == 0]['next_error'].mean()
+
     if pd.isna(switch_error) or pd.isna(stay_error):
         return np.nan
+
     return stay_error-switch_error
 
 #sustained attention 
@@ -98,7 +131,6 @@ def attention(df):
 #effort
 # (edited by mostafa nashaat reason: function to calculate frustration delta using isolated mistake logic)
 def frustration_delta(df):
-    df = df.sort_values('timestamps').reset_index(drop=True)
     errors = df['error'].values
     window_size = 3
     deltas = []
@@ -123,21 +155,26 @@ def frustration_delta(df):
 #cognitive load/working memory
 # (edited by mostafa nashaat reason: calculate working memory delta)
 def working_memory_delta(df):
-    if 'is_high_wm' not in df.columns:
+    if 'cognitive_load' not in df.columns:
         return np.nan
-    error_high = df[df['is_high_wm'] == True]['error'].mean()
-    error_reg = df[df['is_high_wm'] == False]['error'].mean()
+    threshold = df['cognitive_load'].quantile(0.75)
+    error_high = df[df['cognitive_load'] > threshold]['error'].mean()
+    error_reg = df[df['cognitive_load'] <= threshold]['error'].mean()
     
     if pd.isna(error_high) or pd.isna(error_reg):
         return np.nan
         
     return error_reg - error_high
 
+
 #diagnosis function: inputs-> student responses  
 
 def diagnosis(df):
     #return the list of diagnoses
 
+    processing_speed_delta=processing_speed(df)
+    time_management_ratio=time_management(df)['ratio']
+    stress_ratio=stress(df)
     reasoning_delta=reasoning(df)
     language_delta=language(df)
     switch_delta=switch(df)
@@ -147,6 +184,9 @@ def diagnosis(df):
     working_memory_val=working_memory_delta(df)
 
     #tests
+    processing_speed_test=CI(processing_speed_delta,parameters['processing_speed']['mean'],parameters['processing_speed']['std'],parameters['processing_speed']['count'])
+    time_management_test=test_threshold(time_management_ratio,parameters['time_management']['UTM_to_STM_ratio'])
+    stress_test=test_threshold(stress_ratio,parameters['stress']['stress_ratio'])
     reasoning_test=CI(reasoning_delta,parameters['reasoning']['mean'],parameters['reasoning']['std'],parameters['reasoning']['count'])
     language_test=CI(language_delta,parameters['language']['mean'],parameters['language']['std'],parameters['language']['count'])
     switch_test=CI(switch_delta,parameters['flexibility']['mean'],parameters['flexibility']['std'],parameters['flexibility']['count'])
@@ -169,8 +209,14 @@ def diagnosis(df):
         diagnoses.append('frustration')
     if working_memory_test:
         diagnoses.append('working_memory')
+    if processing_speed_test:
+        diagnoses.append('processing_speed')
+    if time_management_test:
+        diagnoses.append('time_management')
+    if stress_test:
+        diagnoses.append('stress')
 
     # (edited by mostafa nashaat reason: add frustration and working memory results to returned series)
-    return pd.Series({'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,
-                      'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
+    return pd.Series({ 'processing_speed':processing_speed_delta,'time_management_ratio':time_management_ratio,'stress_ratio':stress_ratio,'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,
+                      'processing_speed_diag':processing_speed_test,'time_management_diag':time_management_test,'stress_diag':stress_test,'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
                       ,'diagnoses':diagnoses})

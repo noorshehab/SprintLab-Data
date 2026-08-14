@@ -57,6 +57,8 @@ def switch_penalty_dist(df):
         lambda row: check_switch(row['super_topic_ids'], row['next_supertopics']),
         axis=1
     )
+
+    print(df[df['is_switch']==1].head())
     
     # Filter to valid transitions
     df_valid = df[df['next_supertopics'].notna()].copy()

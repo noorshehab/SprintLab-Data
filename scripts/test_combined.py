@@ -148,7 +148,13 @@ def parse_unit(val):
 # engine / data service setup
 #--------------------------------------------------------------------------------
 def prepare_services():
-    """Register skills and questions into the singleton data service and wire the mediator."""
+    """Register skills and questions into the singleton data service and wire the mediator.
+
+    Set USE_QUESTION_PROCESSING=1 to run ingestion through the new data-ingestion +
+    question-processing services (embedding, vector store, similar-skills map, probs).
+    """
+    if os.getenv('USE_QUESTION_PROCESSING', '0').strip() in ('1', 'true', 'True'):
+        return prepare_services_processed()
     data_service = Data_Service()
 
     similar_skills = data_preprocess.label_clusters()
@@ -204,6 +210,78 @@ def prepare_services():
 
     print(f"\nServices ready: {len(data_service.skills)} skills, {n_questions} questions, {len(data_service.students)} students")
     return mediator, data_service
+
+
+def prepare_services_processed():
+    """Same contract as prepare_services() but routed through the data-ingestion and
+    question-processing services (embedding, per-language vector stores, similar-skills
+    map, derived attributes, BKT probs with p_t fixed at 0.017)."""
+    from services.data_ingestion import file_loader
+    from services.data_ingestion.data_ingestion_service import data_ingestion_service
+    from services.question_processing.embedding_service import embedding_service
+    from services.question_processing.question_processing_service import question_processing_service
+
+    data_service = Data_Service()
+    kt = knowledge_tracing_engine(calibration_window=CALIBRATION_WINDOW)
+    bd = behavioral_diagnosis_engine()
+    mediator = Diagnosis_service(kt, bd, data_service)
+
+    ingest = data_ingestion_service()
+    ingest.mediator = mediator
+
+    qproc = question_processing_service(
+        embedder=embedding_service(),
+        text_col=os.getenv('QUESTION_TEXT_FIELD', 'content'),
+        solutions_col=os.getenv('QUESTION_SOLUTION_FIELD', 'analysis'),
+    )
+    qproc.mediator = mediator
+
+    question_metadata = pd.read_csv(os.getenv('QUESTION_METADATA_PATH'))
+    question_metadata['kc_ids'] = question_metadata['kc_ids'].apply(parse_kc_ids)
+
+    raw_questions = _load_raw_questions()
+    question_metadata['content'] = question_metadata['question_id'].map(
+        lambda q: raw_questions.get(str(int(q)), {}).get('content', str(q))
+    )
+    question_metadata['analysis'] = question_metadata['question_id'].map(
+        lambda q: raw_questions.get(str(int(q)), {}).get('analysis', '')
+    )
+    md = qproc.process(question_metadata, questions_json=None)
+    solve_times = assign_solve_times(md)
+
+    unit_index = md['question_id'].astype(int).values
+    unit_series = pd.Series(md['super_topic_ids'].apply(parse_unit).values, index=unit_index)
+
+    records = md.to_dict('records')
+    for row in records:
+        row['time'] = solve_times.get(int(row['question_id']), MIN_SOLVE_TIME)
+        row['super_topic_ids'] = unit_series.get(int(row['question_id']), None)
+        row['difficulty_level'] = md.loc[md['question_id'] == row['question_id'], 'error_rate'].iloc[0]
+        row['time_pressure'] = _time_pressure_tag(md, row['question_id'])
+
+    n_questions, _ = ingest.populate_questions(records)
+    ingest.populate_skills(qproc.similar_skills_map)
+
+    print(f"\nServices ready (processed): {len(data_service.skills)} skills, {n_questions} questions, {len(data_service.students)} students")
+    return mediator, data_service
+
+
+def _load_raw_questions(cache={}):
+    if not cache:
+        from services.data_ingestion import file_loader
+        cache.update(file_loader.load_records(os.getenv('QUESTIONS_PATH')))
+    return cache
+
+
+def _time_pressure_tag(md, qid):
+    row = md.loc[md['question_id'] == qid]
+    if row.empty or 'time_pressure' not in row.columns:
+        return 0
+    return int(row['time_pressure'].iloc[0])
+    row = md.loc[md['question_id'] == qid]
+    if row.empty or 'time_pressure' not in row.columns:
+        return 0
+    return int(row['time_pressure'].iloc[0])
 
 
 #--------------------------------------------------------------------------------

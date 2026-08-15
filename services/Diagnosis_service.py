@@ -1,7 +1,7 @@
 import numpy as np
 from knowledge_tracing import knowledge_tracing_engine
 from services.Data_service import Data_Service
-from services.behavioral_diagnosis_engine import behavioral_diagnosis_engine
+from services.behavioral_diagnosis.behavioral_diagnosis_engine import behavioral_diagnosis_engine
 from services.Interfaces import Mediator
 
 #mediator
@@ -33,6 +33,12 @@ class Diagnosis_service(Mediator):
             self.Data_service.update_responses(request.get('student_id'),request.get('responses'))
         if type=='update_prior':
             self.Data_service.update_priors(request.get('student_id'),request.get('skill_id'),request.get('new_prior'))
+        if type=='add_student':
+            self.Data_service.add_student(request.get('student_id'))
+        if type=='add_question':
+            self.Data_service.add_question(**request['question'])
+        if type=='add_skill':
+            self.Data_service.add_skill(request.get('skill_id'),request.get('similar_skills'))
        
 
     def add_student_response(self, student_id, q_ids, responses,timings,stress_triggers):

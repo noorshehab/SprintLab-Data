@@ -5,7 +5,7 @@ import numpy as np
 class question():
     def __init__(self, q_id, skill_ids,unit_id,text,time,time_pressure,level,
                   cognitive_load,variables_count,steps,language_challenge,language_level,reasoning_level
-                  ,p_t, p_s, p_g):
+                  ,p_t, p_s, p_g, language='en', num_unknowns=1, num_operations=0, cognitive_load_index=None):
         self.id = q_id
         self.skill_ids = skill_ids
         self.unit=unit_id #supertopic_id
@@ -22,6 +22,10 @@ class question():
         self.p_t = p_t
         self.p_s = p_s
         self.p_g = p_g
+        self.language=language
+        self.num_unknowns=num_unknowns
+        self.num_operations=num_operations
+        self.cognitive_load_index=cognitive_load_index
     
     def get_params(self):
         return self.p_t, self.p_s, self.p_g
@@ -40,7 +44,11 @@ class question():
             'steps':self.steps,
             'time_pressure':self.time_pressure,
             'language_challenge':self.language_challenge,
-            'reasoning_level':self.reasoning_level  }
+            'reasoning_level':self.reasoning_level,
+            'language':self.language,
+            'num_unknowns':self.num_unknowns,
+            'num_operations':self.num_operations,
+            'cognitive_load_index':self.cognitive_load_index }
 
     
 class student():

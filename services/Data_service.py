@@ -16,11 +16,13 @@ class Data_Service(metaclass=SigletonMeta):
 
     def add_question(self, q_id, skill_ids,unit_id,text,time,time_pressure,level,
                   cognitive_load,variables_count,steps,language_challenge,language_level,
-                  reasoning_level,p_t, p_s, p_g):
+                  reasoning_level,p_t, p_s, p_g, language='en', num_unknowns=1, num_operations=0,
+                  cognitive_load_index=None):
         if q_id not in self.questions:
             self.questions[q_id] = question(q_id, skill_ids,unit_id,text,time,time_pressure,level,
                   cognitive_load,variables_count,steps,language_challenge,language_level,
-                  reasoning_level,p_t, p_s, p_g)
+                  reasoning_level,p_t, p_s, p_g, language, num_unknowns, num_operations,
+                  cognitive_load_index)
 
     def add_skill(self, skill_id, similar_skills=None):
         if skill_id not in self.skills:

@@ -1,15 +1,24 @@
 import pandas as pd
 import numpy as np
-from behavioral_diagnosis import diagnosis
+from datetime import datetime
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from services.log_setup import get_logger
+from services.behavioral_diagnosis.behavioral_diagnosis import diagnosis
 from services.Interfaces import Component
+
+log=get_logger('behavioral_diagnosis_engine')
 
 
 class behavioral_diagnosis_engine(Component):
-    def __init__(self):
+    def __init__(self)->None:
         self.mediator = None
+        log.info("constructed behavioral_diagnosis_engine")
 
-    def diagnose_student(self, student_id):
-        student = self.mediator.request(self, {'type': 'get_student', 'student_id': student_id})
+    def diagnose_student(self, student_id:str):
+        log.info("diagnose_student | running behavioral diagnosis for %s",student_id)
+        student = self.mediator.request( {'type': 'get_student', 'student_id': student_id})
         if not student:
             return None
 
@@ -19,13 +28,18 @@ class behavioral_diagnosis_engine(Component):
 
         result = diagnosis(df)
 
-        self.mediator.request(self, {'type': 'add_diagnosis', 'student_id': student_id, 'diagnosis': result['diagnoses']})
+        deltas = {k: result[k] for k in result.index if not k.endswith('_diag') and k != 'diagnoses'}
+        timestamp = datetime.now().isoformat()
+
+        self.mediator.request({'type': 'add_diagnosis', 'student_id': student_id, 'diagnosis': result['diagnoses'], 'deltas': deltas, 'timestamp': timestamp})
+        log.info("diagnose_student complete | student_id=%s diagnoses=%s deltas=%s",
+                 student_id,result.get('diagnoses'),deltas)
         return result
 
-    def build_dataframe(self, responses):
+    def build_dataframe(self, responses:list)->pd.DataFrame:
         rows = []
-        for i, (q_id, response, response_time, stress_triggers) in enumerate(responses):
-            question = self.mediator.request(self, {'type': 'get_question', 'question_id': q_id})
+        for i, (q_id, response, response_time, stress_triggers,atag) in enumerate(responses):
+            question = self.mediator.request({'type': 'get_question', 'question_id': q_id})
             if not question:
                 continue
 
@@ -39,6 +53,7 @@ class behavioral_diagnosis_engine(Component):
             row['response_time'] = response_time
             row['stress_triggers'] = stress_triggers
             row['timestamps'] = i
+            row['atag']=atag
 
             rows.append(row)
 

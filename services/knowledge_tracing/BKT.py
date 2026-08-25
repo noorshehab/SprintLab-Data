@@ -15,20 +15,29 @@ def next_response(prior,guess,slip):
 
 def update_prior(prior,guess,slip,improvement,response):
     """
-    P(Lj) = P(Lj−1) + P(T) (1 − P(Lj−1)) .
-    
-    P(Lj |Oj) =1 −((1 − P(T)) [1 − P(Lj−1|Oj−1)] P(G))/(P(G) + (1 − P(S) − P(G)) P(Lj−1|Oj−1))
-    when oj = correct
-    P(Lj |Oj) = (1 −(1 − P(T)) [1 − P(Lj−1|Oj−1)] (1 − P(G)))/(1 − P(G) − (1 − P(S) − P(G)) P(Lj−1|Oj−1))
-    when oj = incorrect.
-    note: P(Lj−1|Oj−1) is just the prior here it was also calculated this same way
-    
-    constraint: P(Lj |Oj),Oj=correct>P(Lj |Oj),Oj=incorrect
+    Standard Bayesian BKT update.
 
+    1. learning transition: P*(L) = P(L) + P(T) (1 - P(L))
+    2. evidence update via Bayes' rule on the response:
+
+       correct:   P(L|C) = P*(L)(1-P(S)) / (P*(L)(1-P(S)) + (1-P*(L))P(G))
+       incorrect: P(L|W) = P*(L)P(S)     / (P*(L)P(S)     + (1-P*(L))(1-P(G)))
+
+    Guarantees (for 0<P(S),P(G)<1):
+      - a correct answer raises the prior, a wrong answer lowers it
+      - P(L|correct) >= P(L|wrong) from any identical starting state
+      - the result stays strictly inside (0, 1); the engine additionally
+        clamps to [0.01, 0.99] so stored priors never reach the bounds
     """
-    if response:
-        p_L=1-((1-improvement)*prior*guess)/(guess+(1-slip-guess)*prior)
-    else:
-        p_L=1-((1-improvement)*prior*(1-guess))/(1-guess-(1-slip-guess)*prior)
-    return p_L
+    learned = prior + improvement * (1 - prior)
 
+    if response:
+        numerator = learned * (1 - slip)
+        denominator = numerator + (1 - learned) * guess
+    else:
+        numerator = learned * slip
+        denominator = numerator + (1 - learned) * (1 - guess)
+
+    if denominator <= 0:
+        return prior
+    return numerator / denominator

@@ -3,9 +3,12 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from services.Interfaces import Component
+from services.log_setup import get_logger
 from services.question_processing.embedding_service import embedding_service
 from services.question_processing import feature_derivation
 from services.question_processing import prob_calcs
+
+log=get_logger('question_processing_service')
 
 #default clustering threshold / neighbor cap, matching data_preprocess.label_clusters
 SIMILARITY_THRESHOLD = 0.757
@@ -18,7 +21,7 @@ class question_processing_service(Component):
     """
 
     def __init__(self, embedder=None, similarity_threshold=SIMILARITY_THRESHOLD,
-                 max_neighbors=MAX_NEIGHBORS, text_col='content', solutions_col='analysis'):
+                 max_neighbors=MAX_NEIGHBORS, text_col='Question_Text', solutions_col='Correct_Answer_Content'):
         self.mediator = None
         self.embedder = embedder or embedding_service()
         self.similarity_threshold = similarity_threshold
@@ -49,11 +52,13 @@ class question_processing_service(Component):
         if isinstance(items, dict):
             items = list(items.items())
         if not items:
-            print('[quesproc] embed_skills: no skill text provided; '
+            log.warning('embed_skills: no skill text provided; '
                   'supply skill_texts or precomputed skill_embeddings')
             return self.skill_embeddings
 
-        ids = [int(i) for i, _ in items]
+        #preserve id type: skill ids may be ints or strings like 'KC-BIO-01'
+        ids = [int(i) if isinstance(i, float) and float(i).is_integer() else i
+               for i, _ in items]
         texts = [str(t) for _, t in items]
 
         cached, to_embed, to_embed_ids = {}, [], []
@@ -76,7 +81,7 @@ class question_processing_service(Component):
         if new_vectors:
             self.embedder.save_cache(new_vectors)
 
-        print(f'[quesproc] embedded {len(all_vecs)} skills (cached={len(cached)})')
+        log.info('embedded %d skills (cached=%d)',len(all_vecs),len(cached))
         return self.skill_embeddings
 
     #--------------------------------------------------------------------------
@@ -110,8 +115,9 @@ class question_processing_service(Component):
         self.similar_skills_map = {
             sid: highest_similarity(i) for i, sid in enumerate(skills)
         }
-        print(f'[quesproc] similar-skills map: {len(self.similar_skills_map)} skills '
-              f'(threshold={self.similarity_threshold}, max_n={self.max_neighbors})')
+        log.info('similar-skills map: %d skills '
+              '(threshold=%s, max_n=%d)',len(self.similar_skills_map),
+              self.similarity_threshold,self.max_neighbors)
         return self.similar_skills_map
 
     #--------------------------------------------------------------------------
@@ -134,7 +140,7 @@ class question_processing_service(Component):
         """Push the similar-skills map into the data service."""
         smap = skills_map or self.similar_skills_map
         for sid, similar in smap.items():
-            self.mediator.request(self, {
+            self.mediator.request( {
                 'type': 'add_skill', 'skill_id': sid, 'similar_skills': similar,
             })
         return list(smap.keys())
@@ -160,14 +166,17 @@ class question_processing_service(Component):
         return self.derive_question_attributes(metadata_df)
 
     def _read_question_skills(self, df):
-        """Extract {question_id: [skill_ids]} from a kc_ids/skill_ids column."""
-        col = 'skill_ids' if 'skill_ids' in df.columns else ('kc_ids' if 'kc_ids' in df.columns else None)
+        """Extract {question_id: [skill_ids]} from a skill/cluster column."""
+        id_col = next((c for c in ['question_id', 'Question_ID'] if c in df.columns), None)
+        if id_col is None:
+            return {}
+        col = next((c for c in ['skill_ids', 'Skill_Cluster_ID', 'kc_ids'] if c in df.columns), None)
         if col is None:
             return {}
         out = {}
-        for qid, raw in zip(df['question_id'], df[col]):
+        for qid, raw in zip(df[id_col], df[col]):
             skills = self._parse_skill_list(raw)
-            out[int(qid)] = skills
+            out[str(qid)] = skills
         return out
 
     @staticmethod

@@ -34,6 +34,8 @@ from services.Diagnosis_service import Diagnosis_service
 from services.knowledge_tracing.knowledge_tracing_engine import knowledge_tracing_engine
 from services.behavioral_diagnosis.behavioral_diagnosis_engine import behavioral_diagnosis_engine
 from services.knowledge_tracing import data_preprocess
+from services.question_processing import feature_derivation
+from services.question_processing import prob_calcs
 
 output_path = os.getenv('EXPERIMENT_OUTPUTS')
 dagshub.init(repo_owner='nhatemshehab', repo_name='SprintLab-Data', mlflow=True)
@@ -52,6 +54,11 @@ MAX_SOLVE_TIME = 900  #15 minutes
 #--------------------------------------------------------------------------------
 def assign_solve_times(question_metadata):
     """Scale solution_length into the [60s, 900s] range. Returns a per-q solve time keyed by question_id."""
+    id_col = 'question_id' if 'question_id' in question_metadata.columns else 'Question_ID'
+    if 'Time_Allowed' in question_metadata.columns:
+        t = pd.to_numeric(question_metadata['Time_Allowed'], errors='coerce').fillna(MIN_SOLVE_TIME).clip(MIN_SOLVE_TIME, MAX_SOLVE_TIME)
+        t.index = question_metadata[id_col].values
+        return t.astype(float)
     s = question_metadata['solution_length'].astype(float).fillna(
         question_metadata['solution_length'].min() if not question_metadata['solution_length'].isna().all() else 0
     )
@@ -77,48 +84,26 @@ def generate_response_timing(solve_time):
 # question attribute derivation (mirrors test_diagnosis.prepare_test_set)
 #--------------------------------------------------------------------------------
 def derive_question_attributes(question_metadata):
-    md = question_metadata.copy()
+    """Derive the question attributes for the generated question-set schema.
 
-    #language difficulty quartile
-    md['ql_z'] = stats.zscore(md['question_length'])
-    md['vr_z'] = stats.zscore(md['vocabulary_richness'])
-    md['nc_z'] = stats.zscore(md['num_clauses'])
-    md['ns_z'] = stats.zscore(md['num_sentences'])
-    md['lang_difficulty_raw'] = md['ql_z'] + md['vr_z'] + md['nc_z'] + md['ns_z']
-    md['lang_difficulty'] = (md['lang_difficulty_raw'] - md['lang_difficulty_raw'].min()) / (md['lang_difficulty_raw'].max() - md['lang_difficulty_raw'].min())
-    md['language_level'] = pd.qcut(md['lang_difficulty'], q=4, labels=['Q1', 'Q2', 'Q3', 'Q4'])
-
-    #reasoning difficulty quartile
-    md['scy_z'] = stats.zscore(md['solution_complexity_y'])
-    md['sv_z'] = stats.zscore(md['solution_vocab'])
-    md['ne_z'] = stats.zscore(md['num_equations'])
-    md['sns_z'] = stats.zscore(md['num_steps'])
-    md['reasoning_difficulty_raw'] = md['scy_z'] + md['sv_z'] + md['ne_z'] + md['sns_z']
-    md['reasoning_difficulty'] = (md['reasoning_difficulty_raw'] - md['reasoning_difficulty_raw'].min()) / (md['reasoning_difficulty_raw'].max() - md['reasoning_difficulty_raw'].min())
-    md['reasoning_level'] = pd.qcut(md['reasoning_difficulty'], q=4, labels=['Q1', 'Q2', 'Q3', 'Q4'])
-
-    #working memory score (PCA on num_variables, solution_complexity_x, relies_on_image)
-    features = ['num_variables', 'solution_complexity_x', 'relies_on_image']
-    df_clean = md.dropna(subset=features + ['error_rate']).copy()
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(df_clean[features])
-    pca = PCA(n_components=1)
-    df_clean['wm_score'] = pca.fit_transform(X_scaled).flatten()
-    if df_clean['wm_score'].corr(df_clean['error_rate']) < 0:
-        df_clean['wm_score'] = -df_clean['wm_score']
-    md = pd.merge(md.drop(columns=['wm_score'], errors='ignore'), df_clean[['question_id', 'wm_score']], on='question_id', how='left')
-
-    #time pressure tag exactly as in time_pressure_dist.py
-    md['sl_z'] = stats.zscore(md['solution_length'])
-    md['sc_z'] = stats.zscore(md['solution_complexity_x'])
-    md['tp_raw'] = md['sl_z'] + md['sc_z']
-    min_val, max_val = md['tp_raw'].min(), md['tp_raw'].max()
-    md['time_pressure_score'] = (md['tp_raw'] - min_val) / (max_val - min_val)
-    md['time_pressure'] = (md['time_pressure_score'] > 0.15).astype(int)
-
-    #difficulty level == question error rate
-    md['difficulty_level'] = md['error_rate']
-
+    Runs the feature-derivation + prob pipelines so the renamed entity fields
+    (language_level, reasoning_level, cognitive_load, num_unknowns, num_operations,
+    p_s/p_g/p_t) are produced even though the generated set does not contain them.
+    """
+    md = feature_derivation.derive_features(
+        question_metadata,
+        text_col='Question_Text',
+        solutions_col='Correct_Answer_Content',
+        language_col='Question_Language',
+    )
+    if 'difficulty_level' not in md.columns:
+        md['difficulty_level'] = pd.to_numeric(md.get('Difficulty_Level'))
+    if 'time_pressure' not in md.columns and 'Time_Pressure_Flag' in md.columns:
+        md['time_pressure'] = md['Time_Pressure_Flag'].astype(str).str.lower().isin(
+            ['1', 'true', 'yes', 'y', 't']).astype(int)
+    probs = prob_calcs.compute_probs(md.copy())
+    md = pd.merge(md, probs[['question_id', 'p_s', 'p_g', 'p_t']], on='question_id', how='left')
+    md['p_t'] = md['p_t'].fillna(prob_calcs.DEFAULT_P_T)
     return md
 
 
@@ -152,7 +137,14 @@ def prepare_services():
 
     Set USE_QUESTION_PROCESSING=1 to run ingestion through the new data-ingestion +
     question-processing services (embedding, vector store, similar-skills map, probs).
+    When the metadata uses the generated question-set schema (Question_ID column) the
+    processed path is used automatically.
     """
+    question_metadata = pd.read_csv(os.getenv('QUESTION_METADATA_PATH'))
+    if 'Question_ID' in question_metadata.columns:
+        print('[prepare] detected generated question-set schema -> processed ingestion')
+        return prepare_services_processed()
+
     if os.getenv('USE_QUESTION_PROCESSING', '0').strip() in ('1', 'true', 'True'):
         return prepare_services_processed()
     data_service = Data_Service()
@@ -160,12 +152,11 @@ def prepare_services():
     similar_skills = data_preprocess.label_clusters()
     probabilities = data_preprocess.set_probs()
 
-    question_metadata = pd.read_csv(os.getenv('QUESTION_METADATA_PATH'))
     question_metadata['kc_ids'] = question_metadata['kc_ids'].apply(parse_kc_ids)
     md = derive_question_attributes(question_metadata)
     solve_times = assign_solve_times(md)
-    unit_index = md['question_id'].astype(int).values
-    unit_series = pd.Series(md['super_topic_ids'].apply(parse_unit).values, index=unit_index)
+    unit_index = md['question_id'].values
+    unit_series = pd.Series(md.get('super_topic_ids', pd.Series(None, index=md.index)).apply(parse_unit).values, index=unit_index)
 
     question_lib = md.merge(
         probabilities[['question_id', 'p_s', 'p_g', 'p_t']],
@@ -190,16 +181,16 @@ def prepare_services():
             q_id=q_id,
             skill_ids=row['kc_ids'],
             unit_id=unit_series.get(q_id, None),
-            text=str(q_id),
-            time=solve_times.get(q_id, MIN_SOLVE_TIME),
-            time_pressure=int(row['time_pressure']),
-            level=float(row['difficulty_level']),
-            cognitive_load=row.get('wm_score', np.nan) if not pd.isna(row.get('wm_score', np.nan)) else 0.0,
-            variables_count=int(row['num_variables']),
-            steps=int(row['num_steps']),
-            language_challenge=float(row['lang_difficulty']) if not pd.isna(row['lang_difficulty']) else 0.0,
-            language_level=str(row['language_level']),
-            reasoning_level=str(row['reasoning_level']),
+            question_text=str(q_id),
+            time_allowed=solve_times.get(q_id, MIN_SOLVE_TIME),
+            time_pressure_flag=int(row.get('time_pressure', 0)),
+            difficulty_level=float(row.get('difficulty_level', 0.0)),
+            cognitive_load=row.get('wm_score', 0.0),
+            variables_count=int(row.get('num_variables', 0)),
+            logical_steps=int(row.get('num_steps', 0)),
+            language_challenging=int(row.get('language_challenge', 0)),
+            language_level=str(row.get('language_level', None)) if row.get('language_level') is not None else None,
+            reasoning_level=str(row.get('reasoning_level', None)) if row.get('reasoning_level') is not None else None,
             p_t=row.p_t, p_s=row.p_s, p_g=row.p_g,
         )
         n_questions += 1
@@ -231,33 +222,14 @@ def prepare_services_processed():
 
     qproc = question_processing_service(
         embedder=embedding_service(),
-        text_col=os.getenv('QUESTION_TEXT_FIELD', 'content'),
-        solutions_col=os.getenv('QUESTION_SOLUTION_FIELD', 'analysis'),
+        text_col=os.getenv('QUESTION_TEXT_FIELD', 'Question_Text'),
+        solutions_col=os.getenv('QUESTION_SOLUTION_FIELD', 'Correct_Answer_Content'),
     )
     qproc.mediator = mediator
 
     question_metadata = pd.read_csv(os.getenv('QUESTION_METADATA_PATH'))
-    question_metadata['kc_ids'] = question_metadata['kc_ids'].apply(parse_kc_ids)
-
-    raw_questions = _load_raw_questions()
-    question_metadata['content'] = question_metadata['question_id'].map(
-        lambda q: raw_questions.get(str(int(q)), {}).get('content', str(q))
-    )
-    question_metadata['analysis'] = question_metadata['question_id'].map(
-        lambda q: raw_questions.get(str(int(q)), {}).get('analysis', '')
-    )
     md = qproc.process(question_metadata, questions_json=None)
-    solve_times = assign_solve_times(md)
-
-    unit_index = md['question_id'].astype(int).values
-    unit_series = pd.Series(md['super_topic_ids'].apply(parse_unit).values, index=unit_index)
-
     records = md.to_dict('records')
-    for row in records:
-        row['time'] = solve_times.get(int(row['question_id']), MIN_SOLVE_TIME)
-        row['super_topic_ids'] = unit_series.get(int(row['question_id']), None)
-        row['difficulty_level'] = md.loc[md['question_id'] == row['question_id'], 'error_rate'].iloc[0]
-        row['time_pressure'] = _time_pressure_tag(md, row['question_id'])
 
     n_questions, _ = ingest.populate_questions(records)
     ingest.populate_skills(qproc.similar_skills_map)
@@ -326,7 +298,8 @@ def run_simulation(mediator, responses, solve_time_map, max_students=None):
 
 def build_solve_time_map(question_metadata):
     md = question_metadata.copy()
-    md['kc_ids'] = md['kc_ids'].apply(parse_kc_ids)
+    if 'kc_ids' in md.columns:
+        md['kc_ids'] = md['kc_ids'].apply(parse_kc_ids)
     solve_times = assign_solve_times(md)
     return solve_times.to_dict()
 

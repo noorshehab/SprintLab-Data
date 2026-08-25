@@ -13,7 +13,8 @@ parameters={'reasoning':{'mean':-0.1933,'std':0.0705,'count':2891},
             'working_memory':{'mean':-0.2232,'std':0.0479,'count':959},
             'processing_speed':{'mean':-0.1226,'std':0.0782,'count':2885},
             'time_management':{'UTM_to_STM_ratio':1.5},
-            'stress':{'stress_ratio':2.0}
+            'stress':{'stress_ratio':2.0},
+            'impulsivity':{'impulse_error_rate':0.33}
         }
 
 def CI(delta,diagnosis_mean,diagnosis_std,n,confidence=0.75):
@@ -35,19 +36,26 @@ def stress(df):
     no_stress_conditions=df[df['stress_triggers']==0]
     return stress_conditions['error'].mean()/no_stress_conditions['error'].mean() if no_stress_conditions['error'].mean()>0 else np.nan
 
+def implusivity(df):
+    impluse_error=df[df['atag']=='Distactor_Impulsive']
+    regular_error=df[df['error']==1]
+    return len(impluse_error)/len(regular_error) if len(regular_error)!= 0 else np.nan 
+
 
 #functions that calculate the deltas
 def processing_speed(df):
-    time_pressure=df[df['time_pressure']==1]
-    no_time_pressure=df[df['time_pressure']==0]
+    tp_col = 'time_pressure_flag' if 'time_pressure_flag' in df.columns else 'time_pressure'
+    time_pressure=df[df[tp_col]==1]
+    no_time_pressure=df[df[tp_col]==0]
 
     delta=time_pressure['error'].mean()-no_time_pressure['error'].mean()
 
     return delta
 
 def time_management(df):
-    under_recommended_time=df[df['response_time']<df['time']]
-    delta=abs(under_recommended_time['response_time']-under_recommended_time['time'])
+    t_col = 'time_allowed' if 'time_allowed' in df.columns else 'time'
+    under_recommended_time=df[df['response_time']<df[t_col]]
+    delta=abs(under_recommended_time['response_time']-under_recommended_time[t_col])
     stm=(delta*under_recommended_time['response']).sum()
     utm=(delta*under_recommended_time['error']).sum()
 
@@ -175,6 +183,7 @@ def diagnosis(df):
     processing_speed_delta=processing_speed(df)
     time_management_ratio=time_management(df)['ratio']
     stress_ratio=stress(df)
+    impulsivity_ratio=implusivity(df)
     reasoning_delta=reasoning(df)
     language_delta=language(df)
     switch_delta=switch(df)
@@ -187,6 +196,7 @@ def diagnosis(df):
     processing_speed_test=CI(processing_speed_delta,parameters['processing_speed']['mean'],parameters['processing_speed']['std'],parameters['processing_speed']['count'])
     time_management_test=test_threshold(time_management_ratio,parameters['time_management']['UTM_to_STM_ratio'])
     stress_test=test_threshold(stress_ratio,parameters['stress']['stress_ratio'])
+    implusivity_test=test_threshold(impulsivity_ratio,parameters['impulsivity']['impulse_error_rate'])
     reasoning_test=CI(reasoning_delta,parameters['reasoning']['mean'],parameters['reasoning']['std'],parameters['reasoning']['count'])
     language_test=CI(language_delta,parameters['language']['mean'],parameters['language']['std'],parameters['language']['count'])
     switch_test=CI(switch_delta,parameters['flexibility']['mean'],parameters['flexibility']['std'],parameters['flexibility']['count'])
@@ -215,8 +225,11 @@ def diagnosis(df):
         diagnoses.append('time_management')
     if stress_test:
         diagnoses.append('stress')
+    if implusivity_test:
+        diagnoses.append('impulsive')
+    
 
     # (edited by mostafa nashaat reason: add frustration and working memory results to returned series)
-    return pd.Series({ 'processing_speed':processing_speed_delta,'time_management_ratio':time_management_ratio,'stress_ratio':stress_ratio,'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,
-                      'processing_speed_diag':processing_speed_test,'time_management_diag':time_management_test,'stress_diag':stress_test,'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
+    return pd.Series({ 'processing_speed':processing_speed_delta,'time_management_ratio':time_management_ratio,'stress_ratio':stress_ratio,'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,'impulse_error_rate':impulsivity_ratio,
+                      'processing_speed_diag':processing_speed_test,'impulsivity_diag':implusivity_test,'time_management_diag':time_management_test,'stress_diag':stress_test,'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
                       ,'diagnoses':diagnoses})

@@ -1,6 +1,9 @@
 import hashlib
 import json
 import os
+from services.log_setup import get_logger
+
+log=get_logger('embedding_service')
 import numpy as np
 
 DEFAULT_MODEL = 'Qwen/Qwen3-Embedding-0.6B'
@@ -46,13 +49,13 @@ class embedding_service:
         if self.use_fallback:
             #EMBEDDING_FALLBACK=1 explicitly forces the fast deterministic
             #embeddings (impractical to run cpu Qwen on the full corpus)
-            print('[embedding] EMBEDDING_FALLBACK=1 -> using deterministic fallback embeddings')
+            log.info('EMBEDDING_FALLBACK=1 -> using deterministic fallback embeddings')
             return False
         try:
             import torch
             from transformers import AutoModel, AutoTokenizer
         except ImportError:
-            print('[embedding] transformers/torch not installed -> using fallback embeddings')
+            log.warning('transformers/torch not installed -> using fallback embeddings')
             return False
 
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -65,7 +68,7 @@ class embedding_service:
         else:
             self._device = self._model.device
         self._dim = self._model.config.hidden_size
-        print(f'[embedding] loaded {self.model_name} on {self._device} (dim={self._dim})')
+        log.info('loaded %s on %s (dim=%s)',self.model_name,self._device,self._dim)
         return True
 
     def available(self):

@@ -1,58 +1,92 @@
-from Entities import question,skill,student
+"""Data_Service - thin facade over a DataRepository.
+
+Owns the public surface every service already codes against; storage
+mechanics live in the injected repository (default: InMemoryRepository).
+Swap in SqlAlchemyRepository later without changing any caller.
+
+Singleton pattern retained for the process-wide instance.
+"""
+from __future__ import annotations
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from services.log_setup import get_logger
+from services.Entities import question, skill, student
 from services.Interfaces import SigletonMeta
-#singleton pattern for data service
+from services.storage.base import DataRepository
+from services.storage.memory import InMemoryRepository
+
+log = get_logger('Data_Service')
 
 
 class Data_Service(metaclass=SigletonMeta):
-    
-    def __init__(self):
-        self.students = {}  # {student_id: student object}
-        self.questions = {}  # {question_id: question object}
-        self.skills = {}  # {skill_id: skill object}
 
-    def add_student(self, student_id):
-        if student_id not in self.students:
-            self.students[student_id] = student(student_id)
+    def __init__(self, repository: DataRepository | None = None) -> None:
+        self.repository: DataRepository = repository or InMemoryRepository()
+        log.info("constructed Data_Service (singleton, repo=%s) | students=%d questions=%d skills=%d",
+                 type(self.repository).__name__,
+                 len(self.repository.list_students()),
+                 len(self.repository.list_questions()),
+                 0)
 
-    def add_question(self, q_id, skill_ids,unit_id,text,time,time_pressure,level,
-                  cognitive_load,variables_count,steps,language_challenge,language_level,
-                  reasoning_level,p_t, p_s, p_g, language='en', num_unknowns=1, num_operations=0,
-                  cognitive_load_index=None):
-        if q_id not in self.questions:
-            self.questions[q_id] = question(q_id, skill_ids,unit_id,text,time,time_pressure,level,
-                  cognitive_load,variables_count,steps,language_challenge,language_level,
-                  reasoning_level,p_t, p_s, p_g, language, num_unknowns, num_operations,
-                  cognitive_load_index)
+    #--- students -------------------------------------------------------
+    def add_student(self, student_id: str) -> None:
+        self.repository.add_student(student_id)
 
-    def add_skill(self, skill_id, similar_skills=None):
-        if skill_id not in self.skills:
-            self.skills[skill_id] = skill(skill_id, similar_skills if similar_skills is not None else [])
+    def get_student(self, student_id: str) -> student | None:
+        return self.repository.get_student(student_id)
 
-    #getters
-    def get_student(self, student_id):
-        return self.students.get(student_id, None)
+    def list_students(self) -> list[student]:
+        return self.repository.list_students()
 
-    def get_question(self, q_id):
-        return self.questions.get(q_id, None)
+    #--- questions ------------------------------------------------------
+    def add_question(self, **kwargs) -> None:
+        self.repository.add_question(**kwargs)
 
-    def get_skill(self, skill_id):
-        return self.skills.get(skill_id, None)
-    
-    def update_priors(self,student_id,skill_id,new_prior):
-        self.students[student_id].update_prior(skill_id,new_prior)
+    def get_question(self, q_ids: list | str) -> list[question | None]:
+        return self.repository.get_question(q_ids)
 
-    def update_responses(self,student_id,responses):
-        for response in responses:
-            q_id, response_value = response[0], response[1]
-            response_time = response[2] if len(response) > 2 else None
-            stress_triggers = response[3] if len(response) > 3 else None
-            self.students[student_id].add_response(q_id,response_value,response_time,stress_triggers)
+    def list_questions(self) -> list[question]:
+        return self.repository.list_questions()
 
-    def add_diagnosis(self,student_id,diagnoses):
-        for diagnosis in diagnoses:
-            self.students[student_id].add_diagnosis(diagnosis)
+    def update_question_attributes(self, q_id: str, attributes: dict) -> None:
+        self.repository.update_question_attributes(q_id, attributes)
 
-    #search functions
-    #get all questions for skill
-    #get all questions for a unit
+    #--- skills ---------------------------------------------------------
+    def add_skill(self, skill_id: str, similar_skills: list | None = None) -> None:
+        self.repository.add_skill(skill_id, similar_skills)
 
+    def get_skill(self, skill_id: str) -> skill | None:
+        return self.repository.get_skill(skill_id)
+
+    #--- student state ---------------------------------------------------
+    def update_priors(self, student_id: str, skill_id: str, new_prior: float) -> None:
+        self.repository.update_priors(student_id, skill_id, new_prior)
+
+    def update_responses(self, student_id: str, responses: list[tuple]) -> None:
+        self.repository.update_responses(student_id, responses)
+
+    def add_diagnosis(self, student_id: str, diagnoses: list,
+                      deltas: dict | None = None,
+                      timestamp: str | None = None) -> None:
+        self.repository.add_diagnosis(student_id, diagnoses, deltas, timestamp)
+
+    def update_content_gaps(self, student_id: str, content_gap_types: dict) -> None:
+        self.repository.update_content_gaps(student_id, content_gap_types)
+
+    def add_priors_history(self, student_id: str, timestamp: str, priors: dict) -> None:
+        self.repository.add_priors_history(student_id, timestamp, priors)
+
+    def update_treatment_plan(self, student_id: str, timestamp: str,
+                              treatment_name: str, parameters: dict) -> None:
+        self.repository.update_treatment_plan(student_id, timestamp, treatment_name, parameters)
+
+    #--- query ----------------------------------------------------------
+    def query(self, parameters: list | dict) -> dict:
+        """Query questions by AND-conjoined conditions.
+
+        See services/storage/memory.py (InMemoryRepository.query) and
+        services/question_schema.py for the condition/attribute contract.
+        Returns {question_id: question}.
+        """
+        return self.repository.query(parameters)

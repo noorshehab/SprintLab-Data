@@ -106,16 +106,19 @@ def test_full_match_lifecycle(client):
             'questionId': qid,
             'response': 1 if i % 3 else 0,
             'responseTimeSeconds': 10.0 + i,
+            'timeout': False,
+            'hintsUsed': 0,
+            'date': '2024-01-01T00:00:00',
         }
         if i % 2:
             answer['stressTrigger'] = 1
         if i % 3 == 0:
-            answer['answerTag'] = 'Distactor_Impulsive'
+            answer['answerTag'] = 'Distractor_Impulsive'
         assert client.post(f'/matches/{match_id}/answers',
                            json=answer).json()['accepted'] is True
 
-    assert client.post(f'/matches/nope/answers',
-                       json={'questionId': 'q0', 'response': 1}).status_code == 404
+    assert client.post('/matches/nope/answers',
+                       json={'questionId': 'q0', 'response': 1, 'timeout': False, 'hintsUsed': 0, 'date': '2024-01-01T00:00:00'}).status_code == 404
     assert client.post('/matches', json={'studentId': 'NOPE'}).status_code == 404
 
     #complete -> progress tracking over accumulated answers

@@ -121,8 +121,10 @@ def create_match(body: MatchCreate):
         raise HTTPException(404, f'student {body.studentId} not found')
     served = rt['match_service'].set_match(body.studentId)
     match = rt['match_store'].create(
-        body.studentId, dto.match_questions_dto(served))
-    return {'matchId': match['matchId'], 'questions': match['questions']}
+        body.studentId, dto.match_questions_dto(served[0]))
+    return {'matchId': match['matchId'], 'questions': match['questions'],
+            'pre_hints': served[1], 'post_hints': served[2], 'play_hints': served[3],
+            'general_music': served[4], 'question_music': served[5]}
 
 
 @app.post('/matches/{match_id}/answers', response_model=AnswerAccepted)
@@ -133,7 +135,9 @@ def append_answer(match_id: str, body: MatchAnswer):
         'response': body.response,
         'responseTimeSeconds': body.responseTimeSeconds,
         'stressTrigger': body.stressTrigger,
-        'answerTag': body.answerTag,
+        'timeOut': body.timeout,
+        'hintsUsed': body.hintsUsed,
+        'date': body.date,
     })
     if updated is None:
         raise HTTPException(404, f'match {match_id} not found')

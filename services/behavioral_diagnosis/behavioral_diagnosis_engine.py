@@ -38,7 +38,8 @@ class behavioral_diagnosis_engine(Component):
 
     def build_dataframe(self, responses:list)->pd.DataFrame:
         rows = []
-        for i, (q_id, response, response_time, stress_triggers,atag) in enumerate(responses):
+        for i, response in enumerate(responses):
+            _, _, q_id, response_value, _, _, response_time, stress_triggers, _, atag = response
             question = self.mediator.request({'type': 'get_question', 'question_id': q_id})
             if not question:
                 continue
@@ -48,8 +49,8 @@ class behavioral_diagnosis_engine(Component):
 
             row['question_id'] = q_id
             row['unit'] = question.get_unit()
-            row['response'] = response
-            row['error'] = 1 - response
+            row['response'] = response_value
+            row['error'] = 1 - response_value
             row['response_time'] = response_time
             row['stress_triggers'] = stress_triggers
             row['timestamps'] = i

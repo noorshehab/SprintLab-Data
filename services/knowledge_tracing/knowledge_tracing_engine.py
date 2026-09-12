@@ -34,7 +34,7 @@ class knowledge_tracing_engine(Component):
         responses = student.get_responses()[: self.calibration_window]
 
         log.info("calibrate_priors | student_id=%s responses=%d",student_id,len(responses))
-        for q_id, response, *_ in responses:
+        for _, _, q_id, response, *_ in responses:
             question = self.mediator.request( {'type': 'get_question', 'question_id': q_id})
             for kc_id in question.get_skills():
                 prior = student.priors.get(kc_id, 0.5)
@@ -133,15 +133,16 @@ class knowledge_tracing_engine(Component):
 
         skill_atags = {}
         for response in student.get_responses():
-            q_id, response_value = response[0], response[1]
+            _, _, q_id, response_value, _, _, _, _, _, atag = response
             if response_value:  #correct -> not an error
                 continue
-            atag = response[4] if len(response) > 4 else None
             question = self.mediator.request( {'type': 'get_question', 'question_id': q_id})
             if not question:
                 continue
             if atag is None:
-                atag = question.content_gap_type
+                # content_gap_type is now on Options; we use the correct one if it exists, otherwise first option
+                correct_opt = next((opt for opt in question.options if opt.is_correct), None)
+                atag = correct_opt.content_gap_type if correct_opt else (question.options[0].content_gap_type if question.options else None)
             for skill_id in question.get_skills():
                 if skill_id in weak_skills:
                     skill_atags.setdefault(skill_id, []).append(atag)

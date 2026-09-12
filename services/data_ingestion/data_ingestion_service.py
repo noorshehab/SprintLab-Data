@@ -1,12 +1,12 @@
 import ast
-import numpy as np
 import pandas as pd
 from services.Interfaces import Component
 from services.data_ingestion import file_loader
+from services.Entities import Question, PreHint, PostHint, PlayHint
 
 
 def parse_list(value):
-    """Parse a value that may be a string like \"[1, 2]\" into a list of ints."""
+    """Parse a value that may be a string like \"[1, 2]\" into a list."""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return []
     if isinstance(value, str):
@@ -16,51 +16,9 @@ def parse_list(value):
         except (ValueError, SyntaxError):
             return [value]
         return parsed if isinstance(parsed, list) else [parsed]
-    if isinstance(value, (list, tuple, np.ndarray)):
+    if isinstance(value, (list, tuple, pd.Series)):
         return list(value)
-    return [value]
-
-
-def parse_unit(value):
-    """Parse a super_topic_ids value into a single unit (first element)."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return None
-    if isinstance(value, str):
-        value = value.strip()
-        try:
-            parsed = ast.literal_eval(value)
-        except (ValueError, SyntaxError):
-            return value
-        return parsed[0] if isinstance(parsed, list) and parsed else (parsed if isinstance(parsed, (list, tuple)) else parsed)
-    if isinstance(value, (list, tuple, np.ndarray)):
-        return value[0] if len(value) > 0 else None
-    return value
-
-
-def to_int(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def to_float(value):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def to_flag(value):
-    """Coerce a boolean-like value (True, 'TRUE', 1, 'yes') to 0/1."""
-    if value is None:
-        return 0
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, (int, float)):
-        return int(bool(value))
-    s = str(value).strip().lower()
-    return int(s in ('1', 'true', 'yes', 'y', 't'))
+    return [value] if value is not None else []
 
 
 def to_language(value, default='en'):
@@ -68,7 +26,8 @@ def to_language(value, default='en'):
     if value is None:
         return default
     s = str(value).strip().lower()
-    mapping = {'english': 'en', 'en': 'en', 'eng': 'en', 'arabic': 'ar', 'ar': 'ar', 'ara': 'ar'}
+    mapping = {'english': 'en', 'en': 'en', 'eng': 'en',
+               'arabic': 'ar', 'ar': 'ar', 'ara': 'ar'}
     return mapping.get(s, default)
 
 
@@ -76,65 +35,12 @@ class data_ingestion_service(Component):
     """Populates the Data_Service (students, questions, skills) from raw files.
 
     Reads JSON/CSV sources and pushes entities into the data service through the
-    mediator, mapping source field names to the entity attributes.
+    mediator. The primary path is JSON (parse_questions_from_json); CSV is
+    retained for backward compatibility.
     """
 
     def __init__(self):
         self.mediator = None
-        #default mapping from question entity fields to source columns
-        self.default_question_field_map = {
-            'q_id': 'Question_ID',
-            'grade': 'Grade',
-            'grade_band': 'Grade_Band',
-            'subject': 'Subject',
-            'unit_id': 'Unit_ID',
-            'lesson_id': 'Lesson_ID',
-            'skill_cluster_id': 'Skill_Cluster_ID',
-            'skill_ids': 'Skill_Cluster_ID',
-            'question_type': 'Question_Type',
-            'question_text': 'Question_Text',
-            'question_media_url': 'Question_Media_URL',
-            'language': 'Question_Language',
-            'difficulty_level': 'Difficulty_Level',
-            'bloom_taxonomy_level': 'Bloom_Taxonomy_Level',
-            'population_difficulty': 'Population_Difficulty',
-            'discrimination_index': 'Discrimination_Index',
-            'time_allowed': 'Time_Allowed',
-            'theoretical_solving_time': 'Theoretical_Solving_Time',
-            'dynamic_avg_time': 'Dynamic_Avg_Time',
-            'cognitive_load_index': 'Cognitive_Load_Index',
-            'variables_count': 'Variables_Count',
-            'logical_steps': 'Logical_Steps',
-            'language_challenging': 'Language_Challenging',
-            'language_challenge_type': 'Language_Challenge_Type',
-            'trick_question': 'Trick_Question',
-            'time_pressure_flag': 'Time_Pressure_Flag',
-            'visual_dependency': 'Visual_Dependency',
-            'real_world_context': 'Real_World_Context',
-            'multi_concept_flag': 'Multi_Concept_Flag',
-            'prerequisite_concept_id': 'Prerequisite_Concept_ID',
-            'correct_answer_id': 'Correct_Answer_ID',
-            'correct_answer_content': 'Correct_Answer_Content',
-            'distractor_1_content': 'Distractor_1_Content',
-            'distractor_2_content': 'Distractor_2_Content',
-            'distractor_3_content': 'Distractor_3_Content',
-            'content_gap_type': 'Content_Gap_Type',
-            'tag_source': 'Tag_Source',
-            'tag_confidence_score': 'Tag_Confidence_Score',
-            'question_status': 'Question_Status',
-            'usage_count': 'Usage_Count',
-            'date_created': 'Date_Created',
-            'last_updated': 'Last_Updated',
-            #derived features, written by the question processing service
-            'cognitive_load': 'cognitive_load',
-            'language_level': 'language_level',
-            'reasoning_level': 'reasoning_level',
-            'num_unknowns': 'num_unknowns',
-            'num_operations': 'num_operations',
-            'p_t': 'p_t',
-            'p_s': 'p_s',
-            'p_g': 'p_g',
-        }
 
     def populate_students(self, records, id_field='uid'):
         """Register every unique student id found in the records."""
@@ -144,10 +50,7 @@ class data_ingestion_service(Component):
         return ids
 
     def populate_skills(self, skills_map):
-        """Register skills with their lists of similar skills.
-
-        skills_map: {skill_id: [similar_skill_id, ...]}
-        """
+        """Register skills with their lists of similar skills."""
         for skill_id, similar in skills_map.items():
             self.mediator.request({
                 'type': 'add_skill',
@@ -156,22 +59,34 @@ class data_ingestion_service(Component):
             })
         return list(skills_map.keys())
 
+    def populate_questions_from_json(self, path):
+        """Load questions from  JSON file.
+
+        Returns (inserted_count, skipped_count).
+        """
+        questions = file_loader.load_questions_from_json(path)
+        n = 0
+        for q in questions:
+            self.mediator.request({'type': 'add_question', 'question': q})
+            n += 1
+        return n, 0
+
     def populate_questions(self, records, field_map=None):
-        """Register questions. field_map overrides the default source columns."""
-        field_map = {**self.default_question_field_map, **(field_map or {})}
+        """Register questions from flat CSV rows (backward compatibility)."""
         n = 0
         skipped = 0
         for row in records:
-            qatt = self._build_question_kwargs(row, field_map)
+            qatt = self._build_question_kwargs(row, field_map or {})
             if qatt is None:
                 skipped += 1
                 continue
-            self.mediator.request( {'type': 'add_question', 'question': qatt})
+            self.mediator.request({'type': 'add_question', 'question': qatt})
             n += 1
         return n, skipped
 
+
     def _build_question_kwargs(self, row, field_map):
-        """Map a single raw row to the question entity constructor kwargs."""
+        """Map a single raw CSV row to question entity constructor kwargs."""
         def get(target):
             source = field_map.get(target)
             if source in row and pd.notna(row.get(source)):
@@ -183,7 +98,7 @@ class data_ingestion_service(Component):
             return None
 
         skill_ids = parse_list(get('skill_ids'))
-        kwargs = {
+        return {
             'q_id': q_id,
             'grade': get('grade'),
             'grade_band': get('grade_band'),
@@ -196,54 +111,43 @@ class data_ingestion_service(Component):
             'question_text': str(get('question_text')) if get('question_text') is not None else str(q_id),
             'question_media_url': get('question_media_url'),
             'question_language': to_language(get('language')),
-            'difficulty_level': to_float(get('difficulty_level')),
+            'difficulty_level': float(get('difficulty_level') or 0),
             'bloom_taxonomy_level': get('bloom_taxonomy_level'),
-            'population_difficulty': to_float(get('population_difficulty')),
-            'discrimination_index': to_float(get('discrimination_index')),
-            'time_allowed': to_float(get('time_allowed')),
-            'theoretical_solving_time': to_float(get('theoretical_solving_time')),
-            'dynamic_avg_time': to_float(get('dynamic_avg_time')),
-            'cognitive_load_index': get('cognitive_load_index'),
-            'variables_count': to_int(get('variables_count')),
-            'logical_steps': to_int(get('logical_steps')),
-            'language_challenging': to_flag(get('language_challenging')),
+            'population_difficulty': float(get('population_difficulty') or 0),
+            'discrimination_index': float(get('discrimination_index') or 0),
+            'time_allowed': float(get('time_allowed') or 0),
+            'theoretical_solving_time': float(get('theoretical_solving_time') or 0),
+            'dynamic_avg_time': float(get('dynamic_avg_time') or 0),
+            'cognitive_load_index': int(get('cognitive_load_index') or 0),
+            'variables_count': int(get('variables_count') or 0),
+            'logical_steps': int(get('logical_steps') or 0),
+            'language_challenging': int(bool(get('language_challenging'))),
             'language_challenge_type': get('language_challenge_type'),
-            'trick_question': to_flag(get('trick_question')),
-            'time_pressure_flag': to_flag(get('time_pressure_flag')),
-            'visual_dependency': to_flag(get('visual_dependency')),
-            'real_world_context': to_flag(get('real_world_context')),
-            'multi_concept_flag': to_flag(get('multi_concept_flag')),
-            'prerequisite_concept_id': get('prerequisite_concept_id'),
-            'correct_answer_id': get('correct_answer_id'),
+            'trick_question': bool(get('trick_question')),
+            'time_pressure_flag': bool(get('time_pressure_flag')),
+            'visual_dependency': bool(get('visual_dependency')),
+            'real_world_context': bool(get('real_world_context')),
+            'multi_concept_flag': bool(get('multi_concept_flag')),
+            'prerequisite_concept_ids': parse_list(get('prerequisite_concept_id')),
             'correct_answer_content': get('correct_answer_content'),
-            'distractor_1_content': get('distractor_1_content'),
-            'distractor_2_content': get('distractor_2_content'),
-            'distractor_3_content': get('distractor_3_content'),
-            'content_gap_type': get('content_gap_type'),
             'tag_source': get('tag_source'),
-            'tag_confidence_score': to_float(get('tag_confidence_score')),
+            'tag_confidence_score': float(get('tag_confidence_score') or 0),
             'question_status': get('question_status'),
-            'usage_count': to_int(get('usage_count')),
+            'usage_count': int(get('usage_count') or 0),
             'date_created': get('date_created'),
             'last_updated': get('last_updated'),
-            #derived features (kept)
-            'cognitive_load': to_float(get('cognitive_load')),
+            'cognitive_load': float(get('cognitive_load') or 0),
             'language_level': str(get('language_level')) if get('language_level') is not None else None,
             'reasoning_level': str(get('reasoning_level')) if get('reasoning_level') is not None else None,
-            'num_unknowns': to_int(get('num_unknowns')),
-            'num_operations': to_int(get('num_operations')),
-            'p_t': to_float(get('p_t')),
-            'p_s': to_float(get('p_s')),
-            'p_g': to_float(get('p_g')),
+            'num_unknowns': int(get('num_unknowns') or 1),
+            'num_operations': int(get('num_operations') or 0),
+            'p_t': float(get('p_t') or 0),
+            'p_s': float(get('p_s') or 0),
+            'p_g': float(get('p_g') or 0),
         }
-        return kwargs
 
     def load_question_records(self, metadata_path, assignments_df=None):
-        """Load question metadata records and, if given, attach assignments.
-
-        assignments_df: DataFrame with the derived per-question features
-        (output of the question processing service) keyed by question_id.
-        """
+        """Load question metadata records and, if given, attach assignments."""
         records = file_loader.load_records(metadata_path)
         if assignments_df is not None:
             id_col = 'question_id' if 'question_id' in assignments_df.columns else 'Question_ID'
@@ -257,3 +161,67 @@ class data_ingestion_service(Component):
                 merged.append(r)
             return merged
         return records
+
+    def populate_pre_hints(self, records) -> int:
+        """Register pre-hints from records (CSV rows or dicts).
+
+        Expected columns: hint_id, hint_text, topic, content_gap_type, diagnosis, hint_type
+        """
+        n = 0
+        for row in records:
+            hint_id = row.get('hint_id', row.get('Hint_ID'))
+            if hint_id is None or pd.isna(hint_id):
+                continue
+            pre_hint = PreHint(
+                hint_id=str(hint_id),
+                hint_text=str(row.get('hint_text', row.get('Hint_Text', ''))),
+                topic=str(row['topic']) if pd.notna(row.get('topic')) else None,
+                content_gap_type=str(row['content_gap_type']) if pd.notna(row.get('content_gap_type')) else None,
+                diagnosis=str(row['diagnosis']) if pd.notna(row.get('diagnosis')) else None,
+                hint_type=str(row.get('hint_type', 'content_gap')),
+            )
+            self.mediator.request({'type': 'add_pre_hint', 'pre_hint': pre_hint})
+            n += 1
+        return n
+
+    def populate_post_hints(self, records) -> int:
+        """Register post-hints from records (CSV rows or dicts).
+
+        Expected columns: hint_id, hint_text, question_id, hint_order
+        """
+        n = 0
+        for row in records:
+            hint_id = row.get('hint_id', row.get('Hint_ID'))
+            question_id = row.get('question_id', row.get('Question_ID'))
+            if hint_id is None or pd.isna(hint_id) or question_id is None or pd.isna(question_id):
+                continue
+            post_hint = PostHint(
+                hint_id=str(hint_id),
+                hint_text=str(row.get('hint_text', row.get('Hint_Text', ''))),
+                question_id=str(question_id),
+                hint_order=int(row.get('hint_order', row.get('Hint_Order', 0)) or 0),
+            )
+            self.mediator.request({'type': 'add_post_hint', 'post_hint': post_hint})
+            n += 1
+        return n
+
+    def populate_play_hints(self, records) -> int:
+        """Register play-hints from records (CSV rows or dicts).
+
+        Expected columns: hint_id, hint_text, q_id, hint_order
+        """
+        n = 0
+        for row in records:
+            hint_id = row.get('hint_id', row.get('Hint_ID'))
+            q_id = row.get('q_id', row.get('Q_ID'))
+            if hint_id is None or pd.isna(hint_id) or q_id is None or pd.isna(q_id):
+                continue
+            play_hint = PlayHint(
+                hint_id=str(hint_id),
+                hint_text=str(row.get('hint_text', row.get('Hint_Text', ''))),
+                q_id=str(q_id),
+                hint_order=int(row.get('hint_order', row.get('Hint_Order', 0)) or 0),
+            )
+            self.mediator.request({'type': 'add_play_hint', 'play_hint': play_hint})
+            n += 1
+        return n

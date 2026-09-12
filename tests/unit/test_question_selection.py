@@ -28,8 +28,8 @@ def bandit():
 
 
 def _make_question(q_id, skill_cluster_id, difficulty=0.5):
-    from services.Entities import question
-    return question(q_id=q_id, skill_cluster_id=skill_cluster_id,
+    from services.Entities import Question
+    return Question(q_id=q_id, skill_cluster_id=skill_cluster_id,
                     difficulty_level=difficulty, p_g=0.1)
 
 

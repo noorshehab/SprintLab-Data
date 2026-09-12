@@ -1,0 +1,224 @@
+{
+    "Questions": [
+        {
+            "Type": 2,
+            "MatchingPairs": {
+                "Prompt": "Match the Egyptian food with its description",
+                "LeftItems": [
+                    "Koshari",
+                    "Molokhia",
+                    "Taameya",
+                    "Basbousa"
+                ],
+                "RightItems": [
+                    "Green soup",
+                    "Fried bean patties",
+                    "Sweet semolina dessert",
+                    "Rice pasta lentil dish"
+                ],
+                "Timer": 30.0
+            }
+        },
+        {
+            "Type": 0,
+            "MCQ": {
+                "Prompt": "Which of these is a famous Egyptian dish made with rice, pasta, and lentils?",
+                "Choices": [
+                    "Koshari",
+                    "Falafel",
+                    "Shawarma",
+                    "Molokhia"
+                ],
+                "CorrectIndex": 0,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 0,
+            "MCQ": {
+                "Prompt": "Which Egyptian city is home to the Great Pyramids of Giza?",
+                "Choices": [
+                    "Alexandria",
+                    "Cairo",
+                    "Luxor",
+                    "Aswan"
+                ],
+                "CorrectIndex": 1,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 0,
+            "MCQ": {
+                "Prompt": "Which Egyptian actor starred in many classic comedy movies?",
+                "Choices": [
+                    "Adel Emam",
+                    "Omar Sharif",
+                    "Ahmed Helmy",
+                    "Mohamed Henedy"
+                ],
+                "CorrectIndex": 0,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 1,
+            "Ordering": {
+                "Prompt": "Arrange these Egyptian meals from light snack to heavy meal",
+                "Items": [
+                    "Koshari",
+                    "Taameya Sandwich",
+                    "Mahshi",
+                    "Molokhia with Rice"
+                ],
+                "CorrectOrder": [
+                    "Taameya Sandwich",
+                    "Molokhia with Rice",
+                    "Mahshi",
+                    "Koshari"
+                ],
+                "Timer": 10.0
+            }
+        },
+        {
+            "Type": 1,
+            "Ordering": {
+                "Prompt": "Arrange these Egyptian historical places from north to south",
+                "Items": [
+                    "Luxor",
+                    "Cairo",
+                    "Alexandria",
+                    "Aswan"
+                ],
+                "CorrectOrder": [
+                    "Alexandria",
+                    "Cairo",
+                    "Luxor",
+                    "Aswan"
+                ],
+                "Timer": 10.0
+            }
+        },
+        {
+            "Type": 3,
+            "FillBlank": {
+                "Prompt": "A famous Egyptian green soup made from jute leaves is called @.",
+                "CorrectAnswers": [
+                    "molokhia",
+                    "molokheya",
+                    "mulukhiyah"
+                ],
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 3,
+            "FillBlank": {
+                "Prompt": "What is the famous ancient Egyptian structures in Giza.",
+                "CorrectAnswers": [
+                    "pyramids",
+                    "giza pyramids"
+                ],
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 6,
+            "TrueOrFalse": {
+                "Prompt": "Koshari is considered one of Egypt's national dishes.",
+                "CorrectAnswer": true,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 6,
+            "TrueOrFalse": {
+                "Prompt": "The Nile River flows through Egypt.",
+                "CorrectAnswer": true,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 6,
+            "TrueOrFalse": {
+                "Prompt": "Luxor is located on the Mediterranean Sea.",
+                "CorrectAnswer": false,
+                "Timer": 8.0
+            }
+        },
+        {
+            "Type": 5,
+            "DragAndDrop": {
+                "Prompt": "Koshari contains @ and @ as main ingredients.",
+                "Spaces": 2,
+                "Answers": [
+                    "rice",
+                    "pasta",
+                    "chocolate",
+                    "fish"
+                ],
+                "CorrectAnswers": [
+                    "rice",
+                    "pasta"
+                ],
+                "Timer": 10.0
+            }
+        },
+        {
+            "Type": 5,
+            "DragAndDrop": {
+                "Prompt": "The city of @ contains the pyramids, and the city of @ is famous for the Bibliotheca Alexandrina.",
+                "Spaces": 2,
+                "Answers": [
+                    "Giza",
+                    "Alexandria",
+                    "Luxor",
+                    "Aswan"
+                ],
+                "CorrectAnswers": [
+                    "Giza",
+                    "Alexandria"
+                ],
+                "Timer": 10.0
+            }
+        },
+        {
+            "Type": 2,
+            "MatchingPairs": {
+                "Prompt": "Match the Egyptian food with its description",
+                "LeftItems": [
+                    "Koshari",
+                    "Molokhia",
+                    "Taameya",
+                    "Basbousa"
+                ],
+                "RightItems": [
+                    "Green soup",
+                    "Fried bean patties",
+                    "Sweet semolina dessert",
+                    "Rice pasta lentil dish"
+                ],
+                "Timer": 10.0
+            }
+        },
+        {
+            "Type": 2,
+            "MatchingPairs": {
+                "Prompt": "Match the place with the city",
+                "LeftItems": [
+                    "Pyramids",
+                    "Karnak Temple",
+                    "Bibliotheca Alexandrina",
+                    "Philae Temple"
+                ],
+                "RightItems": [
+                    "Giza",
+                    "Luxor",
+                    "Alexandria",
+                    "Aswan"
+                ],
+                "Timer": 10.0
+            }
+        }
+    ]
+}

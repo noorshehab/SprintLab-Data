@@ -11,7 +11,7 @@ of the interface, not raw row dicts.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from services.Entities import question, skill, student
+from services.Entities import Question, skill, student, PreHint, PostHint, PlayHint
 
 
 class DataRepository(ABC):
@@ -30,14 +30,17 @@ class DataRepository(ABC):
     def add_question(self, **kwargs) -> None: ...
 
     @abstractmethod
-    def get_question(self, q_ids: list | str) -> list[question | None]: ...
+    def get_question(self, q_ids: list | str) -> list[Question | None]: ...
 
     @abstractmethod
-    def list_questions(self) -> list[question]: ...
+    def list_questions(self) -> list[Question]: ...
 
     @abstractmethod
     def update_question_attributes(self, q_id: str, attributes: dict) -> None:
-        """Set derived/processed fields on a stored question."""
+        """Set derived/processed fields on a stored question.
+
+        Attributes are applied to the QuestionAttributes sub-object.
+        """
 
     #--- skills ---------------------------------------------------------
     @abstractmethod
@@ -76,3 +79,48 @@ class DataRepository(ABC):
         See services/question_schema.py for the attribute registry.
         Returns {question_id: question}.
         """
+
+    #--- pre-hints --------------------------------------------------------
+    @abstractmethod
+    def add_pre_hint(self, pre_hint: PreHint) -> None: ...
+
+    @abstractmethod
+    def get_pre_hint(self, hint_id: str) -> PreHint | None: ...
+
+    @abstractmethod
+    def get_pre_hints_by_topic(self, topic: str) -> list[PreHint]: ...
+
+    @abstractmethod
+    def get_pre_hints_by_content_gap_type(self, topic: str, content_gap_type: str) -> list[PreHint]: ...
+
+    @abstractmethod
+    def get_pre_hints_by_diagnosis(self, diagnosis: str) -> list[PreHint]: ...
+
+    @abstractmethod
+    def list_pre_hints(self) -> list[PreHint]: ...
+
+    #--- post-hints -------------------------------------------------------
+    @abstractmethod
+    def add_post_hint(self, post_hint: PostHint) -> None: ...
+
+    @abstractmethod
+    def get_post_hint(self, hint_id: str) -> PostHint | None: ...
+
+    @abstractmethod
+    def get_post_hints_by_question(self, question_id: str) -> list[PostHint]: ...
+
+    @abstractmethod
+    def list_post_hints(self) -> list[PostHint]: ...
+
+    #--- play-hints -------------------------------------------------------
+    @abstractmethod
+    def add_play_hint(self, play_hint: PlayHint) -> None: ...
+
+    @abstractmethod
+    def get_play_hint(self, hint_id: str) -> PlayHint | None: ...
+
+    @abstractmethod
+    def get_play_hints_by_question(self, q_id: str) -> list[PlayHint]: ...
+
+    @abstractmethod
+    def list_play_hints(self) -> list[PlayHint]: ...

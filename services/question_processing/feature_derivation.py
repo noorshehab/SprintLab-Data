@@ -8,14 +8,14 @@ from services.question_processing.scibert_ner import ScienceEntityNER
 #shared instance - model loads lazily on first extraction, never at import
 _science_ner: ScienceEntityNER | None = None
 
-
+#delete this
 def get_variable_ner() -> ScienceEntityNER:
     global _science_ner
     if _science_ner is None:
         _science_ner = ScienceEntityNER()
     return _science_ner
 
-
+#delete this
 def derive_variables_count_from_text(question_texts):
     """Number of distinct science entities/quantities mentioned in the
     question text (unit-anchored quantities + concept lexicon, extended
@@ -25,6 +25,7 @@ def derive_variables_count_from_text(question_texts):
     return [ner.count(text) for text in question_texts]
 
 #math symbols used to detect distinct operations in a solution
+#delete this 
 MATH_SYMBOLS = set('+-×÷=≠<>±')
 
 #source column names -> canonical internal names (question-processing schema)
@@ -73,7 +74,7 @@ def derive_num_unknowns(solution_texts):
         out.append(max(1, len(vars_found)))
     return out
 
-
+#delete this 
 def derive_num_operations(solution_texts):
     """Number of different operations.
 
@@ -149,7 +150,7 @@ def derive_vocabulary_richness(texts, languages):
         out.append(language_tools.vocabulary_richness(text, lang))
     return out
 
-
+#change this so that theres not all these fallbacks 
 def derive_features(df, text_col=None, solutions_col=None, language_col='Question_Language'):
     """Apply all derivations to a question metadata frame and return enriched copy.
 

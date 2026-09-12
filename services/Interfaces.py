@@ -55,3 +55,14 @@ class Publisher(ABC):
 class Subscriber(ABC):
     def update(self,event:str,event_data:dict)->None:
         pass
+
+class CrystalText():
+    def __init__(self,hint_text,hint_id):
+        self.text=hint_text
+        self.id=hint_id
+
+    def get_id(self):
+        return self.id
+
+    def get_text(self):
+        return self.text

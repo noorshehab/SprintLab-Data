@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 
 from services.log_setup import get_logger
-from services.Entities import question, skill, student
+from services.Entities import Question, skill, student, PreHint, PostHint, PlayHint
 from services.question_schema import resolve_attribute
 from services.storage.base import DataRepository
 
@@ -18,8 +18,11 @@ class InMemoryRepository(DataRepository):
 
     def __init__(self) -> None:
         self.students: dict[str, student] = {}
-        self.questions: dict[str, question] = {}
+        self.questions: dict[str, Question] = {}
         self.skills: dict[str, skill] = {}
+        self.pre_hints: dict[str, PreHint] = {}
+        self.post_hints: dict[str, PostHint] = {}
+        self.play_hints: dict[str, PlayHint] = {}
 
     #--- students -------------------------------------------------------
     def add_student(self, student_id: str) -> None:
@@ -36,14 +39,14 @@ class InMemoryRepository(DataRepository):
     def add_question(self, **kwargs) -> None:
         q_id = kwargs.get('q_id')
         if q_id is not None and q_id not in self.questions:
-            self.questions[q_id] = question(**kwargs)
+            self.questions[q_id] = Question(**kwargs)
 
-    def get_question(self, q_ids: list | str) -> list[question | None]:
+    def get_question(self, q_ids: list | str) -> list[Question | None]:
         if isinstance(q_ids, str):
             q_ids = [q_ids]
         return [self.questions.get(q_id, None) for q_id in q_ids]
 
-    def list_questions(self) -> list[question]:
+    def list_questions(self) -> list[Question]:
         return list(self.questions.values())
 
     def update_question_attributes(self, q_id: str, attributes: dict) -> None:
@@ -51,7 +54,7 @@ class InMemoryRepository(DataRepository):
         if q is None:
             raise KeyError(f'question {q_id} not found')
         for name, value in attributes.items():
-            setattr(q, name, value)
+            setattr(q.attrs, name, value)
 
     #--- skills ---------------------------------------------------------
     def add_skill(self, skill_id: str, similar_skills: list | None = None) -> None:
@@ -73,12 +76,18 @@ class InMemoryRepository(DataRepository):
     def update_responses(self, student_id: str, responses: list[tuple]) -> None:
         stu = self.students[student_id]
         for response in responses:
-            q_id, response_value = response[0], response[1]
-            response_time = response[2] if len(response) > 2 else None
-            stress_triggers = response[3] if len(response) > 3 else None
-            atag = response[4] if len(response) > 4 else None
-            stu.add_response(q_id, response_value, response_time,
-                             stress_triggers, atag)
+            match_id = response[0] if len(response) > 0 else None
+            date = response[1] if len(response) > 1 else None
+            q_id = response[2] if len(response) > 2 else None
+            response_value = response[3] if len(response) > 3 else None
+            error = response[4] if len(response) > 4 else None
+            timeout = response[5] if len(response) > 5 else False
+            response_time = response[6] if len(response) > 6 else None
+            stress_triggers = response[7] if len(response) > 7 else None
+            hints_used = response[8] if len(response) > 8 else 0
+            atag = response[9] if len(response) > 9 else None
+            stu.add_response(match_id, date, q_id, response_value, error, timeout,
+                             response_time, stress_triggers, hints_used, atag)
 
     def add_diagnosis(self, student_id: str, diagnoses: list,
                       deltas: dict | None = None,
@@ -181,11 +190,18 @@ class InMemoryRepository(DataRepository):
             canonical = resolve_attribute(name)
             attr_name = canonical if canonical is not None else str(name)
             if hasattr(q, attr_name):
-                return getattr(q, attr_name)
+                val = getattr(q, attr_name)
+                # Ensure numeric attributes are never None to prevent crashes in comparisons
+                if attr_name in ('difficulty_level', 'p_g', 'p_s', 'p_t', 'cognitive_load', 'cognitive_load_index'):
+                    return val if val is not None else 0.0
+                return val
             #case-insensitive fallback (validated in _validate_attributes)
             for existing in vars(q):
                 if existing.lower() == str(name).lower():
-                    return getattr(q, existing)
+                    val = getattr(q, existing)
+                    if attr_name in ('difficulty_level', 'p_g', 'p_s', 'p_t', 'cognitive_load', 'cognitive_load_index'):
+                        return val if val is not None else 0.0
+                    return val
             return None
 
         _validate_attributes()
@@ -210,3 +226,51 @@ class InMemoryRepository(DataRepository):
         if not matches:
             log.warning("query matched nothing | conditions=%s", parameters)
         return matches
+
+    #--- pre-hints --------------------------------------------------------
+    def add_pre_hint(self, pre_hint: PreHint) -> None:
+        self.pre_hints[pre_hint.id] = pre_hint
+
+    def get_pre_hint(self, hint_id: str) -> PreHint | None:
+        return self.pre_hints.get(hint_id)
+
+    def get_pre_hints_by_topic(self, topic: str) -> list[PreHint]:
+        return [h for h in self.pre_hints.values() if h.topic == topic]
+
+    def get_pre_hints_by_content_gap_type(self, topic: str, content_gap_type: str) -> list[PreHint]:
+        return [h for h in self.pre_hints.values()
+                if h.topic == topic and h.content_gap_type == content_gap_type]
+
+    def get_pre_hints_by_diagnosis(self, diagnosis: str) -> list[PreHint]:
+        return [h for h in self.pre_hints.values() if h.diagnosis == diagnosis]
+
+    def list_pre_hints(self) -> list[PreHint]:
+        return list(self.pre_hints.values())
+
+    #--- post-hints -------------------------------------------------------
+    def add_post_hint(self, post_hint: PostHint) -> None:
+        self.post_hints[post_hint.id] = post_hint
+
+    def get_post_hint(self, hint_id: str) -> PostHint | None:
+        return self.post_hints.get(hint_id)
+
+    def get_post_hints_by_question(self, question_id: str) -> list[PostHint]:
+        hints = [h for h in self.post_hints.values() if h.question_id == question_id]
+        return sorted(hints, key=lambda h: h.hint_order)
+
+    def list_post_hints(self) -> list[PostHint]:
+        return list(self.post_hints.values())
+
+    #--- play-hints -------------------------------------------------------
+    def add_play_hint(self, play_hint: PlayHint) -> None:
+        self.play_hints[play_hint.id] = play_hint
+
+    def get_play_hint(self, hint_id: str) -> PlayHint | None:
+        return self.play_hints.get(hint_id)
+
+    def get_play_hints_by_question(self, q_id: str) -> list[PlayHint]:
+        hints = [h for h in self.play_hints.values() if h.q_id == q_id]
+        return sorted(hints, key=lambda h: h.hint_order)
+
+    def list_play_hints(self) -> list[PlayHint]:
+        return list(self.play_hints.values())

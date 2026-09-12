@@ -54,7 +54,11 @@ def processing_speed(df):
 
 def time_management(df):
     t_col = 'time_allowed' if 'time_allowed' in df.columns else 'time'
-    under_recommended_time=df[df['response_time']<df[t_col]]
+    if t_col not in df.columns or df[t_col].isna().all():
+        return {'stm': np.nan, 'utm': np.nan, 'ratio': np.nan}
+    under_recommended_time = df[df['response_time'] < df[t_col]]
+    if under_recommended_time.empty:
+        return {'stm': np.nan, 'utm': np.nan, 'ratio': np.nan}
     delta=abs(under_recommended_time['response_time']-under_recommended_time[t_col])
     stm=(delta*under_recommended_time['response']).sum()
     utm=(delta*under_recommended_time['error']).sum()

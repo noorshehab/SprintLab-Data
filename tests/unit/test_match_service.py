@@ -40,7 +40,7 @@ def test_set_match_returns_question_dicts(data_service):
     match.Q_S.Bandit.select = lambda *a, **k: __import__('pandas').DataFrame(
         [{'q_id': 'qA'}, {'q_id': 'qB'}])
 
-    result = match.set_match('S1')
+    result, _, _, _, _, _ = match.set_match('S1')
 
     assert isinstance(result, list)
     assert {item['q'].id for item in result} == {'qA', 'qB'}
@@ -52,7 +52,7 @@ def test_set_match_sorts_by_unit_for_flexibility(data_service):
     match.Q_S.Bandit.select = lambda *a, **k: __import__('pandas').DataFrame(
         [{'q_id': 'qA'}, {'q_id': 'qB'}])
 
-    result = match.set_match('S1')  # S1 has flexibility
+    result, _, _, _, _, _ = match.set_match('S1')  # S1 has flexibility
 
     assert [item['q'].id for item in result] == ['qB', 'qA']  # U1 before U2
 

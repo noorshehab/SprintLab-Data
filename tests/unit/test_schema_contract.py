@@ -13,7 +13,7 @@ Guarantees the three consumers of question attributes stay in sync:
 import pytest
 
 from services.Data_service import Data_Service
-from services.Entities import question
+from services.Entities import Question
 from services.Treatment_service import Treatment_Service
 from services.question_schema import FIELD_ALIASES, resolve_attribute, is_known_attribute
 
@@ -38,8 +38,8 @@ def test_every_treatment_attribute_is_a_known_schema_field():
 
 def test_every_treatment_attribute_exists_on_question_entity():
     svc = Treatment_Service()
-    q = question(q_id='probe')
-    known = {v.lower() for v in vars(q)}
+    q = Question(q_id='probe')
+    known = {v.lower() for v in vars(q) | vars(q.attrs)}
     for diagnosis, attr in _all_conditions(svc.initial_treatment_map):
         canonical = resolve_attribute(attr)
         assert canonical and canonical.lower() in known, (
@@ -74,9 +74,9 @@ def corpus_ds():
         dict(q_id='bloom2', skill_cluster_id='KC-4', bloom_taxonomy_level='Understand'),
         dict(q_id='bloom3', skill_cluster_id='KC-4', bloom_taxonomy_level='Analyze'),
         # time pressure + steps + multi-concept
-        dict(q_id='tp0', skill_cluster_id='KC-5', time_pressure_flag=0),
-        dict(q_id='tp1', skill_cluster_id='KC-5', time_pressure_flag=1),
-        dict(q_id='steps', skill_cluster_id='KC-6', logical_steps=1),
+        dict(q_id='tp0', skill_cluster_id='KC-5', time_pressure_flag=0, time_allowed=100),
+        dict(q_id='tp1', skill_cluster_id='KC-5', time_pressure_flag=1, time_allowed=200),
+        dict(q_id='steps', skill_cluster_id='KC-6', logical_steps=1, time_allowed=100),
         dict(q_id='multi', skill_cluster_id='KC-6', multi_concept_flag=1),
     ]
     for seed in seeds:

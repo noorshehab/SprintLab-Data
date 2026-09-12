@@ -52,13 +52,13 @@ def _ids(result):
 
 def test_no_diagnosis_preserves_bandit_ranking():
     match = _pipeline_with_diagnoses([])
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
     assert sorted(_ids(result)) == sorted(q[0] for q in QUESTIONS)
 
 
 def test_flexibility_groups_questions_by_unit():
     match = _pipeline_with_diagnoses(['flexibility'])
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
 
     ids = _ids(result)
     assert len(ids) == len(QUESTIONS)  # all served, just reordered
@@ -68,7 +68,7 @@ def test_flexibility_groups_questions_by_unit():
 
 def test_attention_span_serves_hardest_first():
     match = _pipeline_with_diagnoses(['attention_span'])
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
 
     ids = _ids(result)
     assert ids[0] == 'q_veryhard'  # difficulty 0.95 first
@@ -78,7 +78,7 @@ def test_attention_span_serves_hardest_first():
 
 def test_stress_interleaves_easy_and_hard():
     match = _pipeline_with_diagnoses(['stress'])
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
 
     difficulties = [item['difficulty'] for item in result]
     # ascending baseline: 0.1,0.2,0.5 | 0.7,0.9,0.95 -> zip(easy, hard) weave
@@ -91,7 +91,7 @@ def test_combined_diagnoses_apply_in_documented_sequence():
     flexibility (unit) -> attention_span (difficulty desc) -> stress (weave).
     Final order must equal running all three passes by hand."""
     match = _pipeline_with_diagnoses(['flexibility', 'attention_span', 'stress'])
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
     difficulties = [item['difficulty'] for item in result]
 
     # hand-run the same three passes over the raw pool
@@ -117,5 +117,5 @@ def test_combined_diagnoses_apply_in_documented_sequence():
 ], ids=['flexibility', 'attention_span', 'stress'])
 def test_ordering_never_drops_questions(diagnoses):
     match = _pipeline_with_diagnoses(diagnoses)
-    result = match.set_match('S_order')
+    result, _, _, _, _, _ = match.set_match('S_order')
     assert set(_ids(result)) == {q[0] for q in QUESTIONS}

@@ -142,7 +142,7 @@ def test_treatment_and_match_pipeline(pipeline, prof):
 
     # full chain: QSS unwraps plan -> queries Data_Service via Match_Service
     # -> bandit ranks candidates -> diagnosis-based arrangement
-    match = match_service.set_match(sid)
+    match, pre_hints, post_hints, play_hints, general_music, question_music = match_service.set_match(sid)
     assert isinstance(match, list)
 
 
@@ -197,7 +197,8 @@ def test_full_response_loop_through_mediator(pipeline):
     kt.mediator = diag
 
     for i in range(12):
-        diag.add_student_response('S_loop', [f'q{i}'], [1], [30.0], [None])
+        response = (None, '', f'q{i}', 1, None, False, 30.0, None, 0, None)
+        diag.add_student_response('S_loop', [response])
 
     assert kt.calibrated == ['S_loop']
     assert len(kt.updated) == 2          # responses 11 and 12

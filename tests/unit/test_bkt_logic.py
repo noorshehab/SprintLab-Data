@@ -11,7 +11,6 @@ are covered.
 import pytest
 
 from services.Data_service import Data_Service
-from services.Entities import question
 from services.knowledge_tracing.BKT import next_response, update_prior
 from services.knowledge_tracing.knowledge_tracing_engine import (
     knowledge_tracing_engine,

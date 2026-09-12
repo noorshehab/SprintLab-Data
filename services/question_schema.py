@@ -1,3 +1,5 @@
+#delete this!!!!!!!!!!! just unify the names everywhere what the hell
+
 """Canonical question-field schema.
 
 Single source of truth for question attribute names used across querying,
@@ -6,7 +8,7 @@ as aliases and resolved transparently by Data_service.query - new code
 should always use the canonical name.
 
 To add a queryable question field:
-    1. add the attribute to services.Entities.question
+    1. add the attribute to services.Entities.Question
     2. add an entry here (with any legacy aliases)
 Everything else (query resolution, validation, contracts) follows.
 """

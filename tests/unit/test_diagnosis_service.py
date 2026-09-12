@@ -20,7 +20,8 @@ def diag_service():
 
 def _respond(svc, n=1):
     for i in range(n):
-        svc.add_student_response('S1', [f'q{i}'], [1], [30.0], [None])
+        response = (None, '', f'q{i}', 1, None, False, 30.0, None, 0, None)
+        svc.add_student_response('S1', [response])
 
 
 def test_calibration_fires_at_window(diag_service):

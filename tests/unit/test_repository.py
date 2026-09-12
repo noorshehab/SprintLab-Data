@@ -7,7 +7,6 @@ future SqlAlchemyRepository relies on.
 import pytest
 
 from services.Data_service import Data_Service
-from services.Entities import question
 from services.storage.base import DataRepository
 from services.storage.memory import InMemoryRepository
 
@@ -27,7 +26,8 @@ def test_student_crud(repo):
 
 
 def test_question_crud_and_attribute_update(repo):
-    repo.add_question(q_id='q1', skill_cluster_id='KC-1', difficulty_level=0.5)
+    ds = Data_Service(repository=repo)
+    ds.add_question(q_id='q1', skill_cluster_id='KC-1', difficulty_level=0.5)
     found = repo.get_question(['q1', 'missing'])
     assert [q.id if q else None for q in found] == ['q1', None]
     # scalar id returns single-entity list
@@ -41,9 +41,10 @@ def test_question_crud_and_attribute_update(repo):
 
 
 def test_query_lives_in_repository(repo):
-    repo.add_question(q_id='a', skill_cluster_id='KC-1', difficulty_level=0.9,
+    ds = Data_Service(repository=repo)
+    ds.add_question(q_id='a', skill_cluster_id='KC-1', difficulty_level=0.9,
                       language_level='Q4')
-    repo.add_question(q_id='b', skill_cluster_id='KC-2', difficulty_level=0.1,
+    ds.add_question(q_id='b', skill_cluster_id='KC-2', difficulty_level=0.1,
                       language_level='Q1')
 
     hard = repo.query([{'Topic': 'general', 'Attribute': 'difficulty_level',
@@ -101,7 +102,7 @@ class FakePostgresRepository(DataRepository):
         self.rows = {}
 
     def add_student(self, student_id):
-        self.rows.setdefault(student_id, question if False else None)
+        self.rows.setdefault(student_id, None)
 
     def get_student(self, student_id):
         return self.rows.get(student_id)
@@ -147,6 +148,48 @@ class FakePostgresRepository(DataRepository):
 
     def query(self, parameters):
         return {}
+
+    def add_pre_hint(self, pre_hint):
+        pass
+
+    def get_pre_hint(self, hint_id):
+        return None
+
+    def get_pre_hints_by_topic(self, topic):
+        return []
+
+    def get_pre_hints_by_content_gap_type(self, topic, content_gap_type):
+        return []
+
+    def get_pre_hints_by_diagnosis(self, diagnosis):
+        return []
+
+    def list_pre_hints(self):
+        return []
+
+    def add_post_hint(self, post_hint):
+        pass
+
+    def get_post_hint(self, hint_id):
+        return None
+
+    def get_post_hints_by_question(self, question_id):
+        return []
+
+    def list_post_hints(self):
+        return []
+
+    def add_play_hint(self, play_hint):
+        pass
+
+    def get_play_hint(self, hint_id):
+        return None
+
+    def get_play_hints_by_question(self, q_id):
+        return []
+
+    def list_play_hints(self):
+        return []
 
 
 def test_swap_test_data_service_accepts_any_repository():

@@ -39,6 +39,7 @@ def _write_back(data_service, enriched) -> int:
         if row is None:
             continue
         fields = {
+            'difficulty_level': float(row.get('difficulty_level') or 0.0),
             'language_level': row.get('language_level'),
             'reasoning_level': row.get('reasoning_level'),
             'cognitive_load_index': int(row.get('cognitive_load_index') or 0),

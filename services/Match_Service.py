@@ -72,6 +72,7 @@ class Match_Service(Mediator,Subscriber):
         log.warning("request with unknown type '%s' dropped | request=%s",rtype,request)
         return
 
+    #add the music selection,prehint selection and posthint selection
     def set_match(self,student_id:str)->list:
         ideal_set=self.Q_S.get_optimal_set(student_id)
         student=self.D_S.get_student(student_id)
@@ -83,6 +84,14 @@ class Match_Service(Mediator,Subscriber):
         for q in q_objs:
             if q:
                 questions.append({'q':q,'difficulty':q.get_atts()['difficulty_level'],'unit':q.get_unit()})
+
+        #bundle hint sets for the match
+        pre_hints=self.set_pre_hints(student_id, questions)
+        post_hints=self.set_post_hints(questions)
+        play_hints=self.set_play_hints(questions)
+
+        #music selections for the match
+        general_music, question_music=self.set_music(student_id, questions)
 
         #diagnosis-driven serving order: flexibility -> unit grouping,
         #attention_span -> hard-first, stress -> easy/hard interleaved
@@ -105,4 +114,152 @@ class Match_Service(Mediator,Subscriber):
 
         log.info("set_match | student_id=%s candidates=%d returned=%d diagnoses=%s order=%s",
                  student_id,len(ideal_set),len(questions),diagnoses,order_applied)
-        return questions
+        return questions, pre_hints, post_hints, play_hints, general_music, question_music
+
+    def set_pre_hints(self, student_id: str, questions: list) -> list:
+        """Bundle pre-hints for a student based on diagnoses and content gaps.
+
+        Returns a list of pre-hint dicts for the match.
+        """
+        student = self.D_S.get_student(student_id)
+        if not student:
+            return []
+
+        diagnoses = student.get_diagnoses()
+        content_gaps = student.get_content_gaps()
+        pre_hints = []
+
+        for diagnosis in diagnoses:
+            hints = self.D_S.get_pre_hints_by_diagnosis(diagnosis)
+            for h in hints:
+                pre_hints.append({
+                    'hint_id': h.id,
+                    'hint_text': h.text,
+                    'diagnosis': h.diagnosis,
+                    'hint_type': 'behavioral',
+                })
+
+        for skill_id, gap_type in content_gaps.items():
+            hints = self.D_S.get_pre_hints_by_content_gap_type(skill_id, gap_type)
+            for h in hints:
+                pre_hints.append({
+                    'hint_id': h.id,
+                    'hint_text': h.text,
+                    'topic': h.topic,
+                    'content_gap_type': h.content_gap_type,
+                    'hint_type': 'content_gap',
+                })
+
+        log.info("set_pre_hints | student_id=%s diagnoses=%s gaps=%d hints=%d",
+                 student_id, diagnoses, len(content_gaps), len(pre_hints))
+        return pre_hints
+
+    def set_post_hints(self, questions: list) -> dict:
+        """Bundle post-hints for all questions in a match.
+
+        Returns a dict mapping question_id -> list of post-hint dicts.
+        """
+        post_hints_by_q = {}
+        for q_info in questions:
+            q = q_info.get('q')
+            if not q:
+                continue
+            q_id = q.id
+            hints = self.D_S.get_post_hints_by_question(q_id)
+            post_hints_by_q[q_id] = [
+                {
+                    'hint_id': h.id,
+                    'hint_text': h.text,
+                    'hint_order': h.hint_order,
+                }
+                for h in hints
+            ]
+
+        log.info("set_post_hints | questions=%d total_hints=%d",
+                 len(questions), sum(len(v) for v in post_hints_by_q.values()))
+        return post_hints_by_q
+
+    def set_play_hints(self, questions: list) -> dict:
+        """Bundle play-hints for all questions in a match.
+
+        Returns a dict mapping q_id -> list of play-hint dicts.
+        """
+        play_hints_by_q = {}
+        for q_info in questions:
+            q = q_info.get('q')
+            if not q:
+                continue
+            q_id = q.id
+            hints = self.D_S.get_play_hints_by_question(q_id)
+            play_hints_by_q[q_id] = [
+                {
+                    'hint_id': h.id,
+                    'hint_text': h.text,
+                    'hint_order': h.hint_order,
+                }
+                for h in hints
+            ]
+
+        log.info("set_play_hints | questions=%d total_hints=%d",
+                 len(questions), sum(len(v) for v in play_hints_by_q.values()))
+        return play_hints_by_q
+
+    def set_music(self, student_id: str, questions: list) -> tuple:
+        """Bundle music treatments for a match based on student diagnoses.
+
+        Returns (general_music, question_music_dict) where:
+          - general_music: situational label for the match overall
+          - question_music_dict: {q_id: music_description} per-question assignments
+        """
+        student = self.D_S.get_student(student_id)
+        if not student:
+            return ('', {})
+
+        diagnoses = student.get_diagnoses()
+
+        # Map diagnosis types to audio treatments per the constraints table
+        MUSIC_MAP = {
+            'stress': 'heartbeat',
+            'impulsiveness': 'tempo_slow',
+            'working_memory': 'white_noise',
+            'attention': 'shatter',
+            'time_management': 'tick_tock',
+            'language': 'language_music',
+            'misconception': 'shatter',
+        }
+
+        # General situational label: collect all applicable diagnoses
+        applicable = [MUSIC_MAP[d] for d in diagnoses if d in MUSIC_MAP]
+        general_music = ', '.join(applicable) if applicable else ''
+
+        # Per-question music: check question attributes for matching
+        question_music: dict = {}
+        for q_info in questions:
+            q = q_info.get('q')
+            if not q:
+                continue
+            q_id = q.id
+            music_assignments = []
+
+            # Check question attributes against diagnosis map
+            if q.attrs and q.attrs.language_level and 'language' in MUSIC_MAP:#language challenging= true
+                music_assignments.append(MUSIC_MAP['language'])
+
+            # Check for trick question attribute
+            if q.question_type == 'trick_question' and 'impulsiveness' in MUSIC_MAP:
+                music_assignments.append(MUSIC_MAP['impulsiveness'])
+
+            # Working memory check via cognitive_load_index
+            if q.attrs and q.attrs.cognitive_load_index and q.attrs.cognitive_load_index > 3 and 'working_memory' in MUSIC_MAP:
+                music_assignments.append(MUSIC_MAP['working_memory'])
+
+            # Attention lapses: check for distractor-related flags
+            if q.attrs and q.attrs.multi_concept_flag and 'attention' in MUSIC_MAP:
+                music_assignments.append(MUSIC_MAP['attention'])
+
+            if music_assignments:
+                question_music[q_id] = '; '.join(music_assignments)
+
+        log.info("set_music | student_id=%s diagnoses=%s general=%s q_count=%d music_qs=%d",
+                 student_id, diagnoses, general_music, len(questions), len(question_music))
+        return general_music, question_music

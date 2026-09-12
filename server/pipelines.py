@@ -26,10 +26,15 @@ _DIAG_KEYS = {
 
 
 def _answer_tuples(answers) -> list[tuple]:
-    return [(a.questionId,
+    return [(None,  # match_id (not available in diagnostics)
+             '',   # date (not available in diagnostics)
+             a.questionId,
              1 if bool(a.response) else 0,
+             None,  # error calculated by process_responses
+             False,  # timeout (not available in diagnostics)
              a.responseTimeSeconds,
              a.stressTrigger,
+             0,  # hints_used (not available in diagnostics)
              a.answerTag)
             for a in answers]
 
@@ -47,8 +52,7 @@ def run_diagnostics(runtime, student_id: str, answers) -> dict[str, Any]:
     old_prior_count = len(data.get_student(student_id).get_priors()) \
         if data.get_student(student_id) else 0
 
-    diag.request({'type': 'add_response', 'student_id': student_id,
-                  'responses': _answer_tuples(answers)})
+    diag.add_student_response(student_id, _answer_tuples(answers))
 
     kt.calibrate_priors(student_id)
     kt.update_student_priors(student_id, [a.questionId for a in answers],
@@ -87,16 +91,20 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
     student_id = match['studentId']
 
     q_ids = [a['questionId'] for a in match['answers']]
-    responses = [(a['questionId'],
-                  1 if bool(a['response']) else 0,
+    responses = [(match['matchId'],
+                  a.get('date', ''),
+                  a['questionId'],
+                  a['response'],
+                  None,  # error calculated by process_responses
+                  a.get('timeOut', False),
                   a.get('responseTimeSeconds'),
                   a.get('stressTrigger'),
+                  a.get('hintsUsed', 0),
                   a.get('answerTag')) for a in match['answers']]
 
     priors_before = dict(data.get_student(student_id).get_priors())
 
-    diag.request({'type': 'add_response', 'student_id': student_id,
-                  'responses': responses})
+    diag.add_student_response(student_id, responses)
     kt.update_student_priors(student_id, q_ids,
                              [1 if bool(r[1]) else 0 for r in responses])
     kt.update_content_gaps(student_id)

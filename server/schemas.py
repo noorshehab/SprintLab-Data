@@ -24,25 +24,13 @@ class OptionIn(BaseModel):
 class QuestionAttributesIn(BaseModel):
     difficulty_level: float = 0.0
     bloom_taxonomy_level: Optional[str] = None
-    cognitive_load_index: Optional[int] = None
     variables_count: int = 0
     logical_steps: int = 0
-    language_challenging: int = 0
-    language_challenge_type: Optional[str] = None
     trick_question: bool = False
-    time_pressure_flag: bool = False
     visual_dependency: bool = False
     real_world_context: bool = False
     multi_concept_flag: bool = False
     prerequisite_concept_ids: list[str] = Field(default_factory=list)
-    cognitive_load: float = 0.0
-    language_level: Optional[str] = None
-    reasoning_level: Optional[str] = None
-    num_unknowns: int = 1
-    num_operations: int = 0
-    p_t: float = 0.0
-    p_s: float = 0.0
-    p_g: float = 0.0
 
 
 class QuestionIn(BaseModel):
@@ -51,11 +39,9 @@ class QuestionIn(BaseModel):
     q_id: str
     question_type: Optional[str] = None
     question_text: Optional[str] = None
-    question_media_url: Optional[str] = None
-    question_language: str = "en"
     grade: Optional[int] = None
-    grade_band: Optional[str] = None
     subject: Optional[str] = None
+    curriculum=Optional[str]=None
     unit_id: Optional[str] = None
     lesson_id: Optional[str] = None
     skill_cluster_id: Optional[str] = None
@@ -63,7 +49,6 @@ class QuestionIn(BaseModel):
     tag_source: Optional[str] = None
     tag_confidence_score: Optional[float] = None
     question_status: Optional[str] = None
-    usage_count: int = 0
     options: list[OptionIn] = Field(default_factory=list)
     attrs: Optional[QuestionAttributesIn] = None
 
@@ -137,7 +122,66 @@ class MatchCompleteResult(BaseModel):
     updatedTreatmentPlan: list[dict[str, Any]]
 
 
-#--- students / misc ----------------------------------------------------
+#--- curriculum ------------------------------------------------------------
 
-class StudentCreated(BaseModel):
-    studentId: str
+class UnitIn(BaseModel):
+    unit_id: str
+    language: str = "en"
+    curriculum: str = ""
+    grade: str = ""
+    unit_name: str = ""
+    unit_content: str = ""
+
+class LessonIn(BaseModel):
+    lesson_id: str
+    unit_id: str
+    lesson_name: str = ""
+    lesson_content: str = ""
+
+class LearningObjectiveIn(BaseModel):
+    learning_objective_id: str
+    lesson_id: str
+    learning_objective_content: str = ""
+
+class SkillIn(BaseModel):
+    skill_cluster_id: str
+    lesson_id: str
+    unit_id: str
+    learning_objective_id: Optional[str] = None
+    skill_cluster_content: str = ""
+    similar_skills: list[str] = Field(default_factory=list)
+
+class CurriculumCreated(BaseModel):
+    id: str
+
+#--- curriculum ------------------------------------------------------------
+
+class UnitIn(BaseModel):
+    unit_id: str
+    language: str = "en"
+    curriculum: str = ""
+    grade: str = ""
+    unit_name: str = ""
+    unit_content: str = ""
+
+class LessonIn(BaseModel):
+    lesson_id: str
+    unit_id: str
+    lesson_name: str = ""
+    lesson_content: str = ""
+
+class LearningObjectiveIn(BaseModel):
+    learning_objective_id: str
+    lesson_id: str
+    learning_objective_content: str = ""
+
+class SkillIn(BaseModel):
+    skill_cluster_id: str
+    lesson_id: str
+    unit_id: str
+    learning_objective_id: Optional[str] = None
+    skill_cluster_content: str = ""
+    similar_skills: list[str] = Field(default_factory=list)
+
+class CurriculumCreated(BaseModel):
+    id: str

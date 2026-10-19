@@ -14,10 +14,10 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 
 from server import dto, pipelines, reprocessing
 from server.schemas import (
-    AnswerAccepted, BatchResult, DiagnosticsAccepted, DiagnosticsRun,
+    AnswerAccepted, BatchResult, CurriculumCreated, DiagnosticsAccepted, DiagnosticsRun,
     DiagnosticsStatus, MatchAnswer, MatchCompleteResult, MatchCreate,
     MatchCreated, QuestionBatch, QuestionsOut, QuestionsQuery,
-    StudentCreated,
+    StudentCreated, UnitIn, LessonIn, LearningObjectiveIn, SkillIn,
 )
 from services.Data_service import Data_Service
 from services.Diagnosis_service import Diagnosis_service
@@ -82,6 +82,38 @@ def _rt() -> dict:
         raise HTTPException(503, 'runtime not initialised')
     return runtime
 
+#--- curriculum ------------------------------------------------------------
+
+@app.post('/curriculum/units', status_code=201, response_model=CurriculumCreated)
+def add_unit(body: UnitIn):
+    rt = _rt()
+    from services.Entities import Unit
+    unit = Unit(**body.model_dump())
+    rt['data_service'].add_unit(unit)
+    return {'id': unit.unit_id}
+
+@app.post('/curriculum/lessons', status_code=201, response_model=CurriculumCreated)
+def add_lesson(body: LessonIn):
+    rt = _rt()
+    from services.Entities import Lesson
+    lesson = Lesson(**body.model_dump())
+    rt['data_service'].add_lesson(lesson)
+    return {'id': lesson.lesson_id}
+
+@app.post('/curriculum/objectives', status_code=201, response_model=CurriculumCreated)
+def add_objective(body: LearningObjectiveIn):
+    rt = _rt()
+    from services.Entities import LearningObjective
+    lo = LearningObjective(**body.model_dump())
+    rt['data_service'].add_learning_objective(lo)
+    return {'id': lo.learning_objective_id}
+
+@app.post('/curriculum/skills', status_code=201, response_model=CurriculumCreated)
+def add_skill(body: SkillIn):
+    rt = _rt()
+    # Data_service.add_skill takes (skill_id, similar_skills)
+    rt['data_service'].add_skill(body.skill_cluster_id, body.similar_skills)
+    return {'id': body.skill_cluster_id}
 
 #--- diagnostics --------------------------------------------------------
 

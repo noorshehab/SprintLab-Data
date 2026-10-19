@@ -21,7 +21,7 @@ def parse_list(value):
     return [value] if value is not None else []
 
 
-def to_language(value, default='en'):
+def to_language(value, default='en'):#change this to something that detects language
     """Map a 'Question_Language' value (English/Arabic) to 'en'/'ar'."""
     if value is None:
         return default
@@ -139,8 +139,6 @@ class data_ingestion_service(Component):
             'cognitive_load': float(get('cognitive_load') or 0),
             'language_level': str(get('language_level')) if get('language_level') is not None else None,
             'reasoning_level': str(get('reasoning_level')) if get('reasoning_level') is not None else None,
-            'num_unknowns': int(get('num_unknowns') or 1),
-            'num_operations': int(get('num_operations') or 0),
             'p_t': float(get('p_t') or 0),
             'p_s': float(get('p_s') or 0),
             'p_g': float(get('p_g') or 0),

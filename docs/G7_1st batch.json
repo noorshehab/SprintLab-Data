@@ -2047,7 +2047,7 @@
           "Is_Correct": false,
           "Display_Order": 2,
           "distractor_diagnostics": {
-            "Content_Gap_Type": "Gap_Concept",
+            "Co ntent_Gap_Type": "Gap_Concept",
             "Distractor_Reading_Trap": true,
             "Distractor_Impulsive": false,
             "Prior_Skill_Reference": []

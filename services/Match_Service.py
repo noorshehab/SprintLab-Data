@@ -204,6 +204,15 @@ class Match_Service(Mediator,Subscriber):
                  len(questions), sum(len(v) for v in play_hints_by_q.values()))
         return play_hints_by_q
 
+    def check_options(q):
+        if q and q.options:
+            for opt in q.options:
+                if opt.distractor_reading_trap:
+                    return 'reading_trap'
+                if opt.distractor_impulsive:
+                    return 'impulse'
+    
+    #not currently of use
     def set_music(self, student_id: str, questions: list) -> tuple:
         """Bundle music treatments for a match based on student diagnoses.
 
@@ -216,6 +225,7 @@ class Match_Service(Mediator,Subscriber):
             return ('', {})
 
         diagnoses = student.get_diagnoses()
+        
 
         # Map diagnosis types to audio treatments per the constraints table
         MUSIC_MAP = {

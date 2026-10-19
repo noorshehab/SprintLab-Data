@@ -18,7 +18,6 @@ class Treatment_Service(Component):
             'language':{'language_level':'Q1','Operator':'=='},
             'working_memory':{'cognitive_load':1,'Operator':'<='},
             'processing_speed':{'time_pressure_flag':False,'Operator':'=='},
-            'time_management':{'time_allowed':180,'logical_steps':2,'Operator':'<='},
             'Gap_Absence':{'bloom_taxonomy_level':["Remember" , "Understand"],'Operator':'in'},
             'Gap_Concept':{'visual_dependency':True,'Operator':'=='},
             #diagnoses with delta metrics but previously missing initial plans

@@ -6,6 +6,7 @@ __pycache__/
 # Virtual environments
 .env
 .venv
+.venv_linux/
 venv/
 ENV/
 env/
@@ -164,3 +165,5 @@ ray_results/
 .dvc/
 .dvcignore
 *.dvc
+
+docs/

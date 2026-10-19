@@ -11,7 +11,7 @@ of the interface, not raw row dicts.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from services.Entities import Question, skill, student, PreHint, PostHint, PlayHint
+from services.Entities import Question, SkillCluster, Student, PreHint, PostHint, PlayHint, Unit, Lesson, LearningObjective
 
 
 class DataRepository(ABC):
@@ -20,10 +20,10 @@ class DataRepository(ABC):
     def add_student(self, student_id: str) -> None: ...
 
     @abstractmethod
-    def get_student(self, student_id: str) -> student | None: ...
+    def get_student(self, student_id: str) -> Student | None: ...
 
     @abstractmethod
-    def list_students(self) -> list[student]: ...
+    def list_students(self) -> list[Student]: ...
 
     #--- questions ------------------------------------------------------
     @abstractmethod
@@ -42,12 +42,28 @@ class DataRepository(ABC):
         Attributes are applied to the QuestionAttributes sub-object.
         """
 
+    #--- curriculum ---------------------------------------------------------
+    @abstractmethod
+    def add_unit(self, unit: Unit) -> None: ...
+    @abstractmethod
+    def get_unit(self, unit_id: str) -> Unit | None: ...
+
+    @abstractmethod
+    def add_lesson(self, lesson: Lesson) -> None: ...
+    @abstractmethod
+    def get_lesson(self, lesson_id: str) -> Lesson | None: ...
+
+    @abstractmethod
+    def add_learning_objective(self, lo: LearningObjective) -> None: ...
+    @abstractmethod
+    def get_learning_objective(self, lo_id: str) -> LearningObjective | None: ...
+
     #--- skills ---------------------------------------------------------
     @abstractmethod
     def add_skill(self, skill_id: str, similar_skills: list | None = None) -> None: ...
 
     @abstractmethod
-    def get_skill(self, skill_id: str) -> skill | None: ...
+    def get_skill(self, skill_id: str) -> SkillCluster | None: ...
 
     #--- student state ---------------------------------------------------
     @abstractmethod

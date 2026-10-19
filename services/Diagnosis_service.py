@@ -10,7 +10,7 @@ from services.knowledge_tracing import knowledge_tracing_engine
 from services.Data_service import Data_Service
 from services.behavioral_diagnosis.behavioral_diagnosis_engine import behavioral_diagnosis_engine
 from services.Treatment_service import Treatment_Service
-from services.Entities import student
+from services.Entities import Student
 from services.Interfaces import Mediator,Publisher
 
 log = get_logger('Diagnosis_service')

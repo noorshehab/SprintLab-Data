@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 
 from services.log_setup import get_logger
-from services.Entities import Question, skill, student, PreHint, PostHint, PlayHint
+from services.Entities import Question, SkillCluster, Student, PreHint, PostHint, PlayHint, Unit, Lesson, LearningObjective
 from services.question_schema import resolve_attribute
 from services.storage.base import DataRepository
 
@@ -17,9 +17,12 @@ log = get_logger('memory_repository')
 class InMemoryRepository(DataRepository):
 
     def __init__(self) -> None:
-        self.students: dict[str, student] = {}
+        self.students: dict[str, Student] = {}
         self.questions: dict[str, Question] = {}
-        self.skills: dict[str, skill] = {}
+        self.skills: dict[str, SkillCluster] = {}
+        self.units: dict[str, Unit] = {}
+        self.lessons: dict[str, Lesson] = {}
+        self.learning_objectives: dict[str, LearningObjective] = {}
         self.pre_hints: dict[str, PreHint] = {}
         self.post_hints: dict[str, PostHint] = {}
         self.play_hints: dict[str, PlayHint] = {}
@@ -27,12 +30,13 @@ class InMemoryRepository(DataRepository):
     #--- students -------------------------------------------------------
     def add_student(self, student_id: str) -> None:
         if student_id not in self.students:
-            self.students[student_id] = student(student_id)
+             self.students[student_id] = Student(student_id)
 
-    def get_student(self, student_id: str) -> student | None:
+
+    def get_student(self, student_id: str) -> Student | None:
         return self.students.get(student_id, None)
 
-    def list_students(self) -> list[student]:
+    def list_students(self) -> list[Student]:
         return list(self.students.values())
 
     #--- questions ------------------------------------------------------
@@ -56,13 +60,33 @@ class InMemoryRepository(DataRepository):
         for name, value in attributes.items():
             setattr(q.attrs, name, value)
 
+    #--- curriculum ---------------------------------------------------------
+    def add_unit(self, unit: Unit) -> None:
+        self.units[unit.unit_id] = unit
+
+    def get_unit(self, unit_id: str) -> Unit | None:
+        return self.units.get(unit_id)
+
+    def add_lesson(self, lesson: Lesson) -> None:
+        self.lessons[lesson.lesson_id] = lesson
+
+    def get_lesson(self, lesson_id: str) -> Lesson | None:
+        return self.lessons.get(lesson_id)
+
+    def add_learning_objective(self, lo: LearningObjective) -> None:
+        self.learning_objectives[lo.learning_objective_id] = lo
+
+    def get_learning_objective(self, lo_id: str) -> LearningObjective | None:
+        return self.learning_objectives.get(lo_id)
+
     #--- skills ---------------------------------------------------------
     def add_skill(self, skill_id: str, similar_skills: list | None = None) -> None:
         if skill_id not in self.skills:
-            self.skills[skill_id] = skill(
+             self.skills[skill_id] = SkillCluster(
+
                 skill_id, similar_skills if similar_skills is not None else [])
 
-    def get_skill(self, skill_id: str) -> skill | None:
+    def get_skill(self, skill_id: str) -> SkillCluster | None:
         return self.skills.get(skill_id, None)
 
     #--- student state ---------------------------------------------------

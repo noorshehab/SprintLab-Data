@@ -12,7 +12,6 @@ parameters={'reasoning':{'mean':-0.1933,'std':0.0705,'count':2891},
             # (edited by mostafa nashaat reason: adding working memory threshold parameters on train set)
             'working_memory':{'mean':-0.2232,'std':0.0479,'count':959},
             'processing_speed':{'mean':-0.1226,'std':0.0782,'count':2885},
-            'time_management':{'UTM_to_STM_ratio':1.5},
             'stress':{'stress_ratio':2.0},
             'impulsivity':{'impulse_error_rate':0.33}
         }
@@ -52,22 +51,7 @@ def processing_speed(df):
 
     return delta
 
-def time_management(df):
-    t_col = 'time_allowed' if 'time_allowed' in df.columns else 'time'
-    if t_col not in df.columns or df[t_col].isna().all():
-        return {'stm': np.nan, 'utm': np.nan, 'ratio': np.nan}
-    under_recommended_time = df[df['response_time'] < df[t_col]]
-    if under_recommended_time.empty:
-        return {'stm': np.nan, 'utm': np.nan, 'ratio': np.nan}
-    delta=abs(under_recommended_time['response_time']-under_recommended_time[t_col])
-    stm=(delta*under_recommended_time['response']).sum()
-    utm=(delta*under_recommended_time['error']).sum()
 
-    return{
-        'stm':stm,
-        'utm':utm,
-        'ratio':utm/stm if stm>0 else np.nan
-    }
 #reasoning
 def reasoning(df):
     q1=df[df['reasoning_level']=='Q1']
@@ -185,7 +169,6 @@ def diagnosis(df):
     #return the list of diagnoses
 
     processing_speed_delta=processing_speed(df)
-    time_management_ratio=time_management(df)['ratio']
     stress_ratio=stress(df)
     impulsivity_ratio=implusivity(df)
     reasoning_delta=reasoning(df)
@@ -198,7 +181,6 @@ def diagnosis(df):
 
     #tests
     processing_speed_test=CI(processing_speed_delta,parameters['processing_speed']['mean'],parameters['processing_speed']['std'],parameters['processing_speed']['count'])
-    time_management_test=test_threshold(time_management_ratio,parameters['time_management']['UTM_to_STM_ratio'])
     stress_test=test_threshold(stress_ratio,parameters['stress']['stress_ratio'])
     implusivity_test=test_threshold(impulsivity_ratio,parameters['impulsivity']['impulse_error_rate'])
     reasoning_test=CI(reasoning_delta,parameters['reasoning']['mean'],parameters['reasoning']['std'],parameters['reasoning']['count'])
@@ -225,8 +207,6 @@ def diagnosis(df):
         diagnoses.append('working_memory')
     if processing_speed_test:
         diagnoses.append('processing_speed')
-    if time_management_test:
-        diagnoses.append('time_management')
     if stress_test:
         diagnoses.append('stress')
     if implusivity_test:
@@ -234,6 +214,6 @@ def diagnosis(df):
     
 
     # (edited by mostafa nashaat reason: add frustration and working memory results to returned series)
-    return pd.Series({ 'processing_speed':processing_speed_delta,'time_management_ratio':time_management_ratio,'stress_ratio':stress_ratio,'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,'impulse_error_rate':impulsivity_ratio,
-                      'processing_speed_diag':processing_speed_test,'impulsivity_diag':implusivity_test,'time_management_diag':time_management_test,'stress_diag':stress_test,'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
+    return pd.Series({ 'processing_speed':processing_speed_delta,'stress_ratio':stress_ratio,'reasoning':reasoning_delta,'language':language_delta,'flexibility':switch_delta,'attention':attention_delta,'frustration':frustration_val, 'working_memory':working_memory_val,'impulse_error_rate':impulsivity_ratio,
+                      'processing_speed_diag':processing_speed_test,'impulsivity_diag':implusivity_test,'stress_diag':stress_test,'reasoning_diag':reasoning_test,'language_diag':language_test,'flexibility_diag':switch_test,'attention_diag':attention_test,'frustration_diag':frustration_test, 'working_memory_diag':working_memory_test
                       ,'diagnoses':diagnoses})

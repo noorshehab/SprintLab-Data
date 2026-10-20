@@ -87,6 +87,7 @@ mlflow.log
 
 # Data files
 data/
+docs/
 datasets/
 *.csv
 *.parquet

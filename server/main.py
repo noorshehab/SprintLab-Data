@@ -154,6 +154,7 @@ def create_match(body: MatchCreate):
     served = rt['match_service'].set_match(body.studentId)
     match = rt['match_store'].create(
         body.studentId, dto.match_questions_dto(served[0]))
+    rt['data_service'].create_match(match['matchId'], 'match', 1)
     return {'matchId': match['matchId'], 'questions': match['questions'],
             'pre_hints': served[1], 'post_hints': served[2], 'play_hints': served[3],
             'general_music': served[4], 'question_music': served[5]}
@@ -241,7 +242,7 @@ def get_student(student_id: str):
     s = rt['data_service'].get_student(student_id)
     if s is None:
         raise HTTPException(404, f'student {student_id} not found')
-    return dto.student_dto(s)
+    return dto.student_dto(s, rt['data_service'])
 
 
 @app.get('/health')

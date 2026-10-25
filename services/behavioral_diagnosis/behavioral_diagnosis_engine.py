@@ -18,11 +18,11 @@ class behavioral_diagnosis_engine(Component):
 
     def diagnose_student(self, student_id:str):
         log.info("diagnose_student | running behavioral diagnosis for %s",student_id)
-        student = self.mediator.request( {'type': 'get_student', 'student_id': student_id})
-        if not student:
+        responses = self.mediator.request({'type': 'get_responses', 'student_id': student_id})
+        if not responses:
             return None
 
-        df = self.build_dataframe(student.get_responses())
+        df = self.build_dataframe(responses)
         if df.empty:
             return None
 

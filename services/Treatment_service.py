@@ -23,16 +23,22 @@ class Treatment_Service(Component):
             #diagnoses with delta metrics but previously missing initial plans
             'attention_span': {'logical_steps': 3, 'Operator': '<='},
             'flexibility': {'multi_concept_flag': True, 'Operator': '=='},
-            'stress': {'time_pressure_flag': False, 'Operator': '=='}
+            'time_management': {'time_allowed': 180, 'logical_steps': 2, 'Operator': '<='}
         }
            
+
+    def _request(self, request_type: str, student_id: str, default=None, **extra):
+        request = {'type': request_type, 'student_id': student_id}
+        request.update(extra)
+        value = self.mediator.request(request)
+        return default if value is None else value
 
     def set_treatment_plan(self,student_id:str)->dict:
         student=self.mediator.request({'type':'get_student','student_id':student_id})
         if not student:
             return {}
-        diagnoses=student.get_diagnoses()
-        content_gaps=student.get_content_gaps() or {}
+        diagnoses=self._request('get_diagnoses', student_id, default=[])
+        content_gaps=self._request('get_content_gaps', student_id, default={}) or {}
         treatment_plan={'general':{},'specific':{}} #format {'general':{'threshold1':x},'specific':{'skill_id':{'threshold':x}}} 
 
         #behavioral,exam and cognitive skills
@@ -60,8 +66,7 @@ class Treatment_Service(Component):
         student=self.mediator.request({'type':'get_student','student_id':student_id})
         if not student:
             return {}
-        diagnoses=student.get_diagnoses_history()
-        content_gaps=student.get_content_gaps() or {}
+        content_gaps=self._request('get_content_gaps', student_id, default={}) or {}
 
         #diagnosis name -> delta metric recorded in the deltas_history
         delta_metric_map={
@@ -75,17 +80,25 @@ class Treatment_Service(Component):
         }
 
         #the current treatment plan that gets scaled up
-        stored=student.get_treatment_plan()
-        treatment_plan={k:dict(v) for k,v in stored['treatment_plan'][1].items()}
+        stored = self._request('get_treatment_plan', student_id, default={})
+        treatment_plan={k:dict(v) for k,v in (stored or {}).items()}
+        treatment_plan.setdefault('general', {})
+        treatment_plan.setdefault('specific', {})
     
         #percentage improvement of each delta between the last 2 diagnosis windows
         #deltas move towards zero -> (|old|-|new|)/|old| is the fraction improved
         #timestamps may mix ISO strings and epoch floats - sort by string form
-        deltas_timestamps=sorted(student.get_deltas().keys(),key=str)
+        history = self._request('get_diagnoses_history', student_id, default=[])
+        deltas = {}
+        for snap in history:
+            ts = snap.get('timestamp')
+            if ts is not None:
+                deltas[ts] = snap.get('deltas') or {}
+        deltas_timestamps=sorted(deltas.keys(),key=str)
         improvement={}
         if len(deltas_timestamps)>=2:
-            old_deltas=student.get_deltas()[deltas_timestamps[-2]]
-            new_deltas=student.get_deltas()[deltas_timestamps[-1]]
+            old_deltas=deltas[deltas_timestamps[-2]]
+            new_deltas=deltas[deltas_timestamps[-1]]
             for metric in set([*old_deltas.keys(),*new_deltas.keys()]):
                 o=old_deltas.get(metric)
                 n=new_deltas.get(metric)
@@ -110,7 +123,7 @@ class Treatment_Service(Component):
             treatment_plan['general'][treatment_name]=scaled
 
         #content gap treatments: parameters scale by the per-skill prior improvement
-        priors_history=student.get_priors_history()
+        priors_history=self._request('get_priors_history', student_id, default={})
         priors_timestamps=sorted(priors_history.keys(),key=str)
         prior_improvement={}
         if len(priors_timestamps)>=2:

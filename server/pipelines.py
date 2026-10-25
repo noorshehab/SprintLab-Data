@@ -5,6 +5,7 @@ the routes stay thin.
 """
 from __future__ import annotations
 from typing import Any
+from uuid import uuid4
 
 from services.log_setup import get_logger
 
@@ -25,11 +26,11 @@ _DIAG_KEYS = {
 }
 
 
-def _answer_tuples(answers) -> list[tuple]:
-    return [(None,  # match_id (not available in diagnostics)
-             '',   # date (not available in diagnostics)
+def _answer_tuples(answers, match_id: str, date: str = '') -> list[tuple]:
+    return [(match_id,
+             date,
              a.questionId,
-             1 if bool(a.response) else 0,
+             a.response,
              None,  # error calculated by process_responses
              False,  # timeout (not available in diagnostics)
              a.responseTimeSeconds,
@@ -49,27 +50,30 @@ def run_diagnostics(runtime, student_id: str, answers) -> dict[str, Any]:
     diag = runtime['diagnosis_service']
     kt = diag.KT_engine
 
-    old_prior_count = len(data.get_student(student_id).get_priors()) \
-        if data.get_student(student_id) else 0
+    match_id = f"diagnostics-{uuid4()}"
+    data.create_match(match_id, 'diagnostics', 1)
 
-    diag.add_student_response(student_id, _answer_tuples(answers))
+    old_prior_count = len(data.get_priors(student_id))
+    responses = _answer_tuples(answers, match_id)
+
+    diag.add_student_response(student_id, responses)
 
     kt.calibrate_priors(student_id)
     kt.update_student_priors(student_id, [a.questionId for a in answers],
-                             [1 if bool(a.response) else 0 for a in answers])
+                             [_correctness(diag, a.questionId, a.response) for a in answers])
     kt.update_content_gaps(student_id)
 
     bd_result = diag.BD_engine.diagnose_student(student_id)
 
-    student = data.get_student(student_id)
-    if not student.get_treatment_plan():
-        diag.Treatment_service.set_treatment_plan(student_id)
+    plan = data.get_treatment_plan(student_id)
+    if not plan:
+        plan = diag.Treatment_service.set_treatment_plan(student_id)
     else:
-        diag.Treatment_service.update_treatment_plan(student_id)
+        plan = diag.Treatment_service.update_treatment_plan(student_id)
 
     result = {
-        'priorsWritten': max(len(student.get_priors()), old_prior_count),
-        'treatmentPlanWritten': 'treatment_plan' in student.get_treatment_plan(),
+        'priorsWritten': max(len(data.get_priors(student_id)), old_prior_count),
+        'treatmentPlanWritten': plan is not None,
     }
     log.info("diagnostics | student_id=%s diagnoses=%s -> %s",
              student_id,
@@ -89,9 +93,10 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
     diag = runtime['diagnosis_service']
     kt = diag.KT_engine
     student_id = match['studentId']
+    match_id = match['matchId']
 
     q_ids = [a['questionId'] for a in match['answers']]
-    responses = [(match['matchId'],
+    responses = [(match_id,
                   a.get('date', ''),
                   a['questionId'],
                   a['response'],
@@ -102,22 +107,22 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
                   a.get('hintsUsed', 0),
                   a.get('answerTag')) for a in match['answers']]
 
-    priors_before = dict(data.get_student(student_id).get_priors())
+    priors_before = dict(data.get_priors(student_id))
 
     diag.add_student_response(student_id, responses)
     kt.update_student_priors(student_id, q_ids,
-                             [1 if bool(r[1]) else 0 for r in responses])
+                             [_correctness(diag, r[2], r[3]) for r in responses])
     kt.update_content_gaps(student_id)
 
     bd_result = diag.BD_engine.diagnose_student(student_id)
 
-    student = data.get_student(student_id)
-    if not student.get_treatment_plan():
-        diag.Treatment_service.set_treatment_plan(student_id)
+    plan = data.get_treatment_plan(student_id)
+    if not plan:
+        plan = diag.Treatment_service.set_treatment_plan(student_id)
     else:
-        diag.Treatment_service.update_treatment_plan(student_id)
+        plan = diag.Treatment_service.update_treatment_plan(student_id)
 
-    priors_after = student.get_priors()
+    priors_after = data.get_priors(student_id)
     delta_mastery = {skill: round(priors_after.get(skill, 0.0)
                                   - priors_before.get(skill, 0.0), 4)
                      for skill in set(priors_before) | set(priors_after)}
@@ -134,10 +139,7 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
                 'diagnosed': bool(bd_result[diag_key]),
             })
 
-    stored = student.get_treatment_plan().get('treatment_plan')
-    constraints = []
-    if stored:
-        constraints = runtime['selection_service']._unwrap_treatment_plan(stored[1])
+    constraints = runtime['selection_service']._unwrap_treatment_plan(plan or {})
 
     return {
         'deltaMastery': delta_mastery,
@@ -145,6 +147,15 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
         'behavioralScores': behavioral_scores,
         'updatedTreatmentPlan': constraints,
     }
+
+
+def _correctness(diag, q_id: str, response) -> int:
+    question = diag.Data_service.get_question(q_id)
+    if isinstance(question, list):
+        question = question[0] if question else None
+    if question is None:
+        return 1 if bool(response) else 0
+    return 0 if diag._calculate_error(question, response) else 1
 
 
 def _is_nan(value) -> bool:

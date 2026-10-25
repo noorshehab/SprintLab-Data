@@ -76,6 +76,14 @@ class Diagnosis_service(Mediator,Publisher):
         'add_student':      lambda r:f"student_id={r.get('student_id')}",
         'add_question':     lambda r:f"q_id={(r.get('question') or {}).get('q_id')}",
         'add_skill':        lambda r:f"skill_id={r.get('skill_id')}",
+        'get_responses':    lambda r:f"student_id={r.get('student_id')}",
+        'count_responses':  lambda r:f"student_id={r.get('student_id')}",
+        'get_priors':       lambda r:f"student_id={r.get('student_id')}",
+        'get_priors_history': lambda r:f"student_id={r.get('student_id')} window={r.get('window')}",
+        'get_diagnoses':    lambda r:f"student_id={r.get('student_id')}",
+        'get_diagnoses_history': lambda r:f"student_id={r.get('student_id')} window={r.get('window')}",
+        'get_content_gaps': lambda r:f"student_id={r.get('student_id')}",
+        'get_treatment_plan': lambda r:f"student_id={r.get('student_id')}",
     }
 
     @staticmethod
@@ -92,6 +100,22 @@ class Diagnosis_service(Mediator,Publisher):
         rtype=request.get('type','none')
         if rtype=='get_student':
             return self.Data_service.get_student(request.get('student_id'))
+        if rtype=='get_responses':
+            return self.Data_service.get_responses(request.get('student_id'))
+        if rtype=='count_responses':
+            return self.Data_service.count_responses(request.get('student_id'))
+        if rtype=='get_priors':
+            return self.Data_service.get_priors(request.get('student_id'))
+        if rtype=='get_priors_history':
+            return self.Data_service.get_priors_history(request.get('student_id'), request.get('window', 2))
+        if rtype=='get_diagnoses':
+            return self.Data_service.get_diagnoses(request.get('student_id'))
+        if rtype=='get_diagnoses_history':
+            return self.Data_service.get_diagnoses_history(request.get('student_id'), request.get('window', 2))
+        if rtype=='get_content_gaps':
+            return self.Data_service.get_content_gaps(request.get('student_id'))
+        if rtype=='get_treatment_plan':
+            return self.Data_service.get_treatment_plan(request.get('student_id'))
         if rtype=='get_question':
             result=self.Data_service.get_question(request.get('question_id'))
             #scalar id -> single entity (engines expect one question, not a list)
@@ -150,8 +174,7 @@ class Diagnosis_service(Mediator,Publisher):
 
         self.Data_service.update_responses(student_id, new_responses)
 
-        student = self.Data_service.get_student(student_id)
-        n_responses = len(student.get_responses())
+        n_responses = self.Data_service.count_responses(student_id)
         q_ids = [r[2] for r in new_responses]  # q_id is at index 2
 
         log.info("add_student_response | student_id=%s +%d responses (total=%d)",
@@ -162,19 +185,23 @@ class Diagnosis_service(Mediator,Publisher):
                      self.calibration_window, student_id)
             self.KT_engine.calibrate_priors(student_id)
         elif n_responses > self.calibration_window:
-            binary_responses = [1 if bool(r[3]) else 0 for r in new_responses]  # response at index 3
+            binary_responses = [0 if bool(r[4]) else 1 for r in new_responses]
             self.KT_engine.update_student_priors(student_id, q_ids, binary_responses)
             self.KT_engine.update_content_gaps(student_id)
-            self.Data_service.add_priors_history(student_id,
-                                 datetime.now().isoformat(), student.get_priors().copy())
+            self.Data_service.add_priors_history(
+                student_id,
+                datetime.now().isoformat(),
+                self.Data_service.get_priors(student_id),
+            )
 
-        if n_responses >= 100 and not student.get_diagnoses_history():
+        has_diagnoses = bool(self.Data_service.get_diagnoses(student_id))
+        if n_responses >= 100 and not has_diagnoses:
             log.info("first behavioral diagnosis triggered at %d responses | student_id=%s",
                      n_responses, student_id)
             self.BD_engine.diagnose_student(student_id)
             self.Treatment_service.set_treatment_plan(student_id)
 
-        if student.get_diagnoses_history() and (n_responses % 10 == 0) and n_responses > 0:
+        if has_diagnoses and (n_responses % 10 == 0) and n_responses > 0:
             log.info("periodic re-diagnosis at %d responses | student_id=%s",
                      n_responses, student_id)
             self.BD_engine.diagnose_student(student_id)
@@ -219,14 +246,24 @@ class Diagnosis_service(Mediator,Publisher):
         if question_type == 'mcq':
             if isinstance(response, int) and 0 <= response < len(question.options):
                 return bool(question.options[response].is_correct)
+            if isinstance(response, str):
+                target = response.strip()
+                for opt in question.options:
+                    if opt.option_id == target or opt.option_id.endswith(f"_{target}") or opt.option_id.endswith(target):
+                        return bool(opt.is_correct)
+                for opt in question.options:
+                    if str(opt.content).strip().lower() == target.lower():
+                        return bool(opt.is_correct)
             return False
 
         elif question_type == 'true_false':
+            target = str(response).strip().lower()
             for opt in question.options:
-                if opt.is_correct:
-                    correct_str = str(opt.content).lower()
-                    response_str = str(response).lower()
-                    return correct_str == response_str
+                if opt.option_id.lower() == target:
+                    return bool(opt.is_correct)
+            for opt in question.options:
+                if str(opt.content).strip().lower() == target:
+                    return bool(opt.is_correct)
             return False
 
         elif question_type == 'ordering':
@@ -318,6 +355,12 @@ class Diagnosis_service(Mediator,Publisher):
                 opt = question.options[response]
                 if hasattr(opt, 'content_gap_type') and opt.content_gap_type:
                     return opt.content_gap_type
+            if isinstance(response, str):
+                target = response.strip()
+                for opt in question.options:
+                    if opt.option_id == target or opt.option_id.endswith(f"_{target}") or opt.option_id.endswith(target):
+                        if getattr(opt, 'content_gap_type', None):
+                            return opt.content_gap_type
             return "Gap_Prior"
 
         elif question_type == 'true_false':

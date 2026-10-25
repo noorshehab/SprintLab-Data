@@ -26,7 +26,7 @@ class Match_Service(Mediator,Subscriber):
         if not student: return
 
         # 1. Collect Student Context
-        student_context = {'id': sid, 'priors': student.get_priors()}
+        student_context = {'id': sid, 'priors': self.D_S.get_priors(sid)}
 
         # 2. Collect Question Contexts
         q_objs = self.D_S.get_question(q_ids)
@@ -34,7 +34,7 @@ class Match_Service(Mediator,Subscriber):
 
         # 3. Compute Rewards from Priors History
         # Reward = mean percentage change in priors for skills in the question
-        history = student.get_priors_history()
+        history = self.D_S.get_priors_history(sid, window=2)
         timestamps = sorted(history.keys())
         if len(timestamps) < 2: return
         
@@ -61,6 +61,16 @@ class Match_Service(Mediator,Subscriber):
         rtype=request.get('type','none')
         if rtype=='get_student':
             return self.D_S.get_student(request.get('student_id'))
+        if rtype=='get_priors':
+            return self.D_S.get_priors(request.get('student_id'))
+        if rtype=='get_priors_history':
+            return self.D_S.get_priors_history(request.get('student_id'), request.get('window', 2))
+        if rtype=='get_treatment_plan':
+            return self.D_S.get_treatment_plan(request.get('student_id'))
+        if rtype=='get_diagnoses':
+            return self.D_S.get_diagnoses(request.get('student_id'))
+        if rtype=='get_content_gaps':
+            return self.D_S.get_content_gaps(request.get('student_id'))
         #query request
         if rtype=='query':
             result=self.D_S.query(request.get('parameters'))
@@ -76,7 +86,9 @@ class Match_Service(Mediator,Subscriber):
     def set_match(self,student_id:str)->list:
         ideal_set=self.Q_S.get_optimal_set(student_id)
         student=self.D_S.get_student(student_id)
-        diagnoses=student.get_diagnoses()
+        if not student:
+            return [], [], {}, {}, '', {}
+        diagnoses=self.D_S.get_diagnoses(student_id)
 
         #fetch all selected questions at once
         q_objs=self.D_S.get_question(ideal_set['q_id'].tolist())
@@ -125,8 +137,8 @@ class Match_Service(Mediator,Subscriber):
         if not student:
             return []
 
-        diagnoses = student.get_diagnoses()
-        content_gaps = student.get_content_gaps()
+        diagnoses = self.D_S.get_diagnoses(student_id)
+        content_gaps = self.D_S.get_content_gaps(student_id)
         pre_hints = []
 
         for diagnosis in diagnoses:
@@ -224,7 +236,7 @@ class Match_Service(Mediator,Subscriber):
         if not student:
             return ('', {})
 
-        diagnoses = student.get_diagnoses()
+        diagnoses = self.D_S.get_diagnoses(student_id)
         
 
         # Map diagnosis types to audio treatments per the constraints table

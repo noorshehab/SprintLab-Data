@@ -87,6 +87,39 @@ class DataRepository(ABC):
     def update_treatment_plan(self, student_id: str, timestamp: str,
                               treatment_name: str, parameters: dict) -> None: ...
 
+    @abstractmethod
+    def get_responses(self, student_id: str) -> list[tuple]:
+        """Return response tuples in chronological order."""
+
+    @abstractmethod
+    def count_responses(self, student_id: str) -> int: ...
+
+    @abstractmethod
+    def get_priors(self, student_id: str) -> dict[str, float]: ...
+
+    @abstractmethod
+    def get_priors_history(self, student_id: str, window: int = 2) -> dict: ...
+
+    @abstractmethod
+    def get_diagnoses(self, student_id: str) -> list[str]: ...
+
+    @abstractmethod
+    def get_diagnoses_history(self, student_id: str, window: int = 2) -> list[dict]: ...
+
+    @abstractmethod
+    def get_content_gaps(self, student_id: str) -> dict[str, str]: ...
+
+    @abstractmethod
+    def get_treatment_plan(self, student_id: str) -> dict | None: ...
+
+    @abstractmethod
+    def replace_treatment_plan(self, student_id: str, timestamp: str,
+                               treatment_plan: dict) -> None: ...
+
+    @abstractmethod
+    def create_match(self, match_id: str, match_type: str,
+                     num_participants: int = 1) -> None: ...
+
     #--- query ----------------------------------------------------------
     @abstractmethod
     def query(self, parameters: list | dict) -> dict:

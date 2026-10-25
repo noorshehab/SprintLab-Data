@@ -18,11 +18,14 @@ class Question_Selection_Service(Component):
         log.info("constructed Question_Selection_Service | bandit=%s mediator=%s",
                  type(CB).__name__,type(M_S).__name__ if M_S else None)
 
+    def _get_plan(self, student_id: str) -> dict:
+        return self.mediator.request({'type': 'get_treatment_plan', 'student_id': student_id}) or {}
+
+    def _get_priors(self, student_id: str) -> dict:
+        return self.mediator.request({'type': 'get_priors', 'student_id': student_id}) or {}
+
     def get_candidate_questions(self,student_id:str)->dict:
-        #get the student and their treatment plan
-        student=self.mediator.request({'type': 'get_student', 'student_id': student_id})
-        stored=student.get_treatment_plan()
-        treatment=stored['treatment_plan'][1] if 'treatment_plan' in stored else {}
+        treatment = self._get_plan(student_id)
         #unwrap the treatment plan for the student to get query parameters
         parameters=self._unwrap_treatment_plan(treatment)
         #send a query request to the match service
@@ -58,8 +61,7 @@ class Question_Selection_Service(Component):
         candidates=self.get_candidate_questions(student_id)
         if not candidates:
             return pd.DataFrame({'q_id':[],'score':[]})
-        student=self.mediator.request({'type': 'get_student', 'student_id': student_id})
-        student_context={'id':student.id,'priors':student.get_priors()}
+        student_context={'id':student_id,'priors':self._get_priors(student_id)}
         question_contexts=build_question_context(candidates.values())
         selected=self.Bandit.select(student_context,question_contexts)
         log.info("get_optimal_set | student_id=%s scored=%d selected=%d",

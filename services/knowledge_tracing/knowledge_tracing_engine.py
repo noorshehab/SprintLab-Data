@@ -24,20 +24,35 @@ class knowledge_tracing_engine(Component):
 
     
     
+    def _state(self, request_type: str, student_id: str, default=None):
+        value = self.mediator.request({'type': request_type, 'student_id': student_id})
+        return default if value is None else value
+
+    def _get_responses(self, student_id: str) -> list:
+        return self._state('get_responses', student_id, [])
+
+    def _get_priors(self, student_id: str) -> dict:
+        return self._state('get_priors', student_id, {})
+
+    def _get_content_gaps(self, student_id: str) -> dict:
+        return self._state('get_content_gaps', student_id, {})
+
     def calibrate_priors(self, student_id:str)->None:
         direct_correct_multiplier = 1.1
         direct_incorrect_multiplier = 0.90
         similar_correct_multiplier = 1.05
         similar_incorrect_multiplier = 0.95
 
-        student = self.mediator.request( {'type': 'get_student', 'student_id': student_id})
-        responses = student.get_responses()[: self.calibration_window]
+        responses = self._get_responses(student_id)[: self.calibration_window]
+        priors = self._get_priors(student_id)
 
         log.info("calibrate_priors | student_id=%s responses=%d",student_id,len(responses))
         for _, _, q_id, response, *_ in responses:
             question = self.mediator.request( {'type': 'get_question', 'question_id': q_id})
+            if not question:
+                continue
             for kc_id in question.get_skills():
-                prior = student.priors.get(kc_id, 0.5)
+                prior = priors.get(kc_id, 0.5)
                 if response:  # correct
                     new_prior = prior * direct_correct_multiplier
                 else:         # incorrect
@@ -47,6 +62,7 @@ class knowledge_tracing_engine(Component):
                 log.debug("calibrate_priors | student_id=%s skill=%s prior %.3f -> %.3f (q_id=%s)",
                           student_id,kc_id,prior,new_prior,q_id)
                 self.mediator.request({'type': 'update_prior', 'student_id': student_id, 'skill_id': kc_id, 'new_prior': new_prior})
+                priors[kc_id] = new_prior
 
                 # apply proportional change to similar skills (with smaller multiplier)
                 skill = self.mediator.request({'type': 'get_skill', 'skill_id': kc_id})
@@ -59,14 +75,15 @@ class knowledge_tracing_engine(Component):
                         adjusted = max(0.01, min(0.99, adjusted))
                         # update similar skill `sk` (not kc_id) via mediator
                         self.mediator.request( {'type': 'update_prior', 'student_id': student_id, 'skill_id': sk, 'new_prior': adjusted})
+                        priors[sk] = adjusted
         log.info("calibrate_priors complete | student_id=%s skills=%d",
-                 student_id,len(student.get_priors()))
+                 student_id,len(self._get_priors(student_id)))
 
     
     def update_student_priors(self,student_id:str,q_ids:list,responses:list)->None:
         #how do we update similar skills
         #take the %change in the prior for a kc for example +1% or -5% and apply to similar skills
-        student = self.mediator.request({'type': 'get_student', 'student_id': student_id})
+        priors = self._get_priors(student_id)
         response_index=0
         improvements=defaultdict(list)
         for q_id in q_ids:
@@ -77,7 +94,7 @@ class knowledge_tracing_engine(Component):
                 continue
             response=responses[response_index]
             for kc_id in question.get_skills():
-                prior = student.priors.get(kc_id, 0.5)
+                prior = priors.get(kc_id, 0.5)
                 new_prior = update_prior(prior, question.p_g, question.p_s, question.p_t, response)
                 new_prior = max(0.01, min(0.99, new_prior))
                 log.debug("update_student_priors | student_id=%s skill=%s prior %.3f -> %.3f",
@@ -86,6 +103,7 @@ class knowledge_tracing_engine(Component):
                 #repository persists it (direct entity mutation would not)
                 if self.mediator:
                     self.mediator.request({'type': 'update_prior', 'student_id': student_id, 'skill_id': kc_id, 'new_prior': new_prior})
+                priors[kc_id] = new_prior
                 perc_change = (new_prior - prior) / prior 
                 self.update_similar_skills(student_id, kc_id, perc_change)
 
@@ -95,10 +113,10 @@ class knowledge_tracing_engine(Component):
         skill = self.mediator.request( {'type': 'get_skill', 'skill_id': skill_id})
         if not skill:
             return
-        student = self.mediator.request({'type': 'get_student', 'student_id': student_id})
+        priors = self._get_priors(student_id)
         
         for sk in skill.get_similar():
-            old_prior=student.priors.get(sk, 0.5)
+            old_prior=priors.get(sk, 0.5)
             updated = old_prior*(1+percentage_change)
             new_prior = max(0.01, min(0.99, updated))
             #write via mediator only - keeps repository persistence guaranteed
@@ -108,10 +126,10 @@ class knowledge_tracing_engine(Component):
         question = self.mediator.request({'type': 'get_question', 'question_id': q_id})
         if not question:
             raise KeyError(f"Question {q_id} not found")
-        student = self.mediator.request({'type': 'get_student', 'student_id': student_id})
+        priors = self._get_priors(student_id)
         
         # Average priors across all KCs in the question
-        avg_prior = np.mean([student.priors.get(kc_id, 0.5) for kc_id in question.get_skills()])
+        avg_prior = np.mean([priors.get(kc_id, 0.5) for kc_id in question.get_skills()])
         
         p_C, pred = next_response(avg_prior, question.p_g, question.p_s)
         log.debug("predict_response | student_id=%s q_id=%s avg_prior=%.3f p_C=%.3f",
@@ -124,15 +142,16 @@ class knowledge_tracing_engine(Component):
             Gap_Concept	Answer uses the right vocabulary from the lesson but does not actually solve the problem — catches rote memorization.
             Gap_Misconception	Answer reflects a logical conclusion built on a well-known, widespread scientific misconception.
         """
-        student = self.mediator.request( {'type': 'get_student', 'student_id': student_id})
-        if not student:
+        priors = self._get_priors(student_id)
+        responses = self._get_responses(student_id)
+        if not priors and not responses:
             return {}
 
         #for every skill-id with priors below 0.5 collect the atags of the error responses
-        weak_skills = {skill_id for skill_id, prior in student.priors.items() if prior < 0.5}
+        weak_skills = {skill_id for skill_id, prior in priors.items() if prior < 0.5}
 
         skill_atags = {}
-        for response in student.get_responses():
+        for response in responses:
             _, _, q_id, response_value, _, _, _, _, _, atag = response
             if response_value:  #correct -> not an error
                 continue
@@ -147,9 +166,9 @@ class knowledge_tracing_engine(Component):
                 if skill_id in weak_skills:
                     skill_atags.setdefault(skill_id, []).append(atag)
 
-        content_gap_types = dict(getattr(student, 'content_gap_types', {}) or {})
+        content_gap_types = dict(self._get_content_gaps(student_id) or {})
 
-        for skill_id, prior in student.priors.items():
+        for skill_id, prior in priors.items():
             if prior < 0.5:
                 #find the most frequent atag in these errors
                 atags = [g for g in skill_atags.get(skill_id, []) if g]

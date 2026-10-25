@@ -5,6 +5,10 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+class StudentCreated(BaseModel):
+    studentId: str
+
+
 class QuestionsQuery(BaseModel):
     allQs: str = "False"
     ids: list[str] = Field(default_factory=list)
@@ -41,7 +45,7 @@ class QuestionIn(BaseModel):
     question_text: Optional[str] = None
     grade: Optional[int] = None
     subject: Optional[str] = None
-    curriculum=Optional[str]=None
+    curriculum: Optional[str] = None
     unit_id: Optional[str] = None
     lesson_id: Optional[str] = None
     skill_cluster_id: Optional[str] = None

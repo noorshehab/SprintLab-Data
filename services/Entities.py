@@ -296,6 +296,8 @@ class Question(Base):
         **kwargs,
     ) -> None:
         self.q_id = q_id
+        self.id = q_id
+        self.time_pressure_flag = kwargs.get('time_pressure_flag', False)
         self.question_type = question_type
         self.question_text = question_text
         self.question_media_url = question_media_url
@@ -718,3 +720,7 @@ class Student(Base):
 
     def __repr__(self) -> str:
         return f"Student({self.student_id!r}, grade={self.grade_band!r})"
+
+
+# Legacy aliases used by older callers/tests.
+student = Student

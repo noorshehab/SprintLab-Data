@@ -1,7 +1,10 @@
 import re
 import spacy
 from spacy.matcher import PhraseMatcher
-import curriculum_vocab
+try:
+    import curriculum_vocab
+except ImportError:
+    from . import curriculum_vocab
 from typing import Dict
 nlp = spacy.load("en_core_web_sm")
 

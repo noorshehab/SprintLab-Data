@@ -83,8 +83,8 @@ class InMemoryRepository(DataRepository):
     def add_skill(self, skill_id: str, similar_skills: list | None = None) -> None:
         if skill_id not in self.skills:
              self.skills[skill_id] = SkillCluster(
-
-                skill_id, similar_skills if similar_skills is not None else [])
+                skill_cluster_id=skill_id,
+                similar_skills=similar_skills if similar_skills is not None else [])
 
     def get_skill(self, skill_id: str) -> SkillCluster | None:
         return self.skills.get(skill_id, None)
@@ -131,6 +131,61 @@ class InMemoryRepository(DataRepository):
     def update_treatment_plan(self, student_id: str, timestamp: str,
                               treatment_name: str, parameters: dict) -> None:
         self.students[student_id].update_treatment_plan(timestamp, treatment_name, parameters)
+
+    def get_responses(self, student_id: str) -> list[tuple]:
+        stu = self.students.get(student_id)
+        return list(stu.get_responses()) if stu else []
+
+    def count_responses(self, student_id: str) -> int:
+        stu = self.students.get(student_id)
+        return len(stu.get_responses()) if stu else 0
+
+    def get_priors(self, student_id: str) -> dict[str, float]:
+        stu = self.students.get(student_id)
+        return dict(stu.get_priors()) if stu else {}
+
+    def get_priors_history(self, student_id: str, window: int = 2) -> dict:
+        stu = self.students.get(student_id)
+        if not stu:
+            return {}
+        history = stu.get_priors_history()
+        keys = list(history.keys())[-window:]
+        return {k: dict(history[k]) for k in keys}
+
+    def get_diagnoses(self, student_id: str) -> list[str]:
+        stu = self.students.get(student_id)
+        return list(stu.get_diagnoses()) if stu else []
+
+    def get_diagnoses_history(self, student_id: str, window: int = 2) -> list[dict]:
+        stu = self.students.get(student_id)
+        if not stu:
+            return []
+        deltas = stu.get_deltas()
+        history = stu.get_diagnoses_history()
+        keys = list(history.keys())[-window:]
+        return [
+            {'timestamp': k, 'diagnoses': list(history[k]), 'deltas': dict(deltas.get(k, {}))}
+            for k in keys
+        ]
+
+    def get_content_gaps(self, student_id: str) -> dict[str, str]:
+        stu = self.students.get(student_id)
+        return dict(stu.get_content_gaps()) if stu else {}
+
+    def get_treatment_plan(self, student_id: str) -> dict | None:
+        stu = self.students.get(student_id)
+        if not stu:
+            return None
+        stored = stu.get_treatment_plan().get('treatment_plan')
+        return stored[1] if stored else None
+
+    def replace_treatment_plan(self, student_id: str, timestamp: str,
+                               treatment_plan: dict) -> None:
+        self.students[student_id].update_treatment_plan(timestamp, 'treatment_plan', treatment_plan)
+
+    def create_match(self, match_id: str, match_type: str,
+                     num_participants: int = 1) -> None:
+        return None
 
     #--- query ----------------------------------------------------------
     def query(self, parameters: list | dict) -> dict:

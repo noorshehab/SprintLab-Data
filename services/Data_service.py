@@ -65,38 +65,44 @@ class Data_Service(metaclass=SigletonMeta):
 
         # 2. Track which attributes were explicitly provided
         explicit_attrs = set(kwargs.keys())
+        attrs = kwargs.get('attrs')
+        if isinstance(attrs, dict):
+            explicit_attrs |= set(attrs.keys())
 
         # 3. Immediately derive attributes and probabilities
         q = self.repository.get_question(q_id)[0]
-        if q:
-            # Build a minimal metadata frame for the single question
-            metadata = {
-                'question_id': [q.id],
-                'Question_Text': [q.question_text],
-                'Question_Language': [q.language],
-                'Logical_Steps': [q.logical_steps],
-            }
-            # Include options content for solution-based derivations
-            if q.options:
-                correct_opt = next((opt for opt in q.options if opt.is_correct), None)
-                metadata['Correct_Answer_Content'] = [correct_opt.content if correct_opt else '']
-            else:
-                metadata['Correct_Answer_Content'] = ['']
+        if q and q.question_text:
+            try:
+                # Build a minimal metadata frame for the single question
+                metadata = {
+                    'question_id': [q.id],
+                    'Question_Text': [q.question_text],
+                    'Question_Language': [q.language],
+                    'Logical_Steps': [q.logical_steps],
+                }
+                # Include options content for solution-based derivations
+                if q.options:
+                    correct_opt = next((opt for opt in q.options if opt.is_correct), None)
+                    metadata['Correct_Answer_Content'] = [correct_opt.content if correct_opt else '']
+                else:
+                    metadata['Correct_Answer_Content'] = ['']
 
-            df = pd.DataFrame(metadata)
-            qp = question_processing_service()
-            enriched = qp.derive_question_attributes(df)
-            
-            # Extract derived values for this question, but only overwrite
-            # attributes that were NOT explicitly provided by the caller.
-            row = enriched.iloc[0]
-            derived_attrs = {}
-            for key in ('difficulty_level', 'language_level', 'reasoning_level',
-                        'cognitive_load', 'cognitive_load_index', 'p_g', 'p_s', 'p_t'):
-                if key not in explicit_attrs:
-                    derived_attrs[key] = row.get(key) or (0.0 if 'load' in key or 'g' in key or 's' in key or 't' in key else 'Q1')
-            if derived_attrs:
-                self.repository.update_question_attributes(q.id, derived_attrs)
+                df = pd.DataFrame(metadata)
+                qp = question_processing_service()
+                enriched = qp.derive_question_attributes(df)
+
+                # Extract derived values for this question, but only overwrite
+                # attributes that were NOT explicitly provided by the caller.
+                row = enriched.iloc[0]
+                derived_attrs = {}
+                for key in ('difficulty_level', 'language_level', 'reasoning_level',
+                            'cognitive_load', 'cognitive_load_index', 'p_g', 'p_s', 'p_t'):
+                    if key not in explicit_attrs:
+                        derived_attrs[key] = row.get(key) or (0.0 if 'load' in key or 'g' in key or 's' in key or 't' in key else 'Q1')
+                if derived_attrs:
+                    self.repository.update_question_attributes(q.id, derived_attrs)
+            except Exception as exc:
+                log.warning("attribute derivation skipped for %s: %s", q_id, exc)
 
     def get_question(self, q_ids: list | str) -> list[Question | None]:
         return self.repository.get_question(q_ids)
@@ -145,6 +151,39 @@ class Data_Service(metaclass=SigletonMeta):
                               treatment_name: str, parameters: dict) -> None:
         self.repository.update_treatment_plan(student_id, timestamp, treatment_name, parameters)
 
+    def get_responses(self, student_id: str) -> list[tuple]:
+        return self.repository.get_responses(student_id)
+
+    def count_responses(self, student_id: str) -> int:
+        return self.repository.count_responses(student_id)
+
+    def get_priors(self, student_id: str) -> dict[str, float]:
+        return self.repository.get_priors(student_id)
+
+    def get_priors_history(self, student_id: str, window: int = 2) -> dict:
+        return self.repository.get_priors_history(student_id, window)
+
+    def get_diagnoses(self, student_id: str) -> list[str]:
+        return self.repository.get_diagnoses(student_id)
+
+    def get_diagnoses_history(self, student_id: str, window: int = 2) -> list[dict]:
+        return self.repository.get_diagnoses_history(student_id, window)
+
+    def get_content_gaps(self, student_id: str) -> dict[str, str]:
+        return self.repository.get_content_gaps(student_id)
+
+    def get_treatment_plan(self, student_id: str) -> dict | None:
+        return self.repository.get_treatment_plan(student_id)
+
+    def replace_treatment_plan(self, student_id: str, timestamp: str,
+                               treatment_plan: dict) -> None:
+        self.repository.replace_treatment_plan(student_id, timestamp, treatment_plan)
+
+    def create_match(self, match_id: str, match_type: str,
+                     num_participants: int = 1) -> None:
+        self.repository.create_match(match_id, match_type, num_participants)
+    
+
     #--- Crystal text / hints --------------------------------------------
     def add_pre_hint(self, pre_hint: PreHint) -> None:
         self.repository.add_pre_hint(pre_hint)
@@ -191,9 +230,5 @@ class Data_Service(metaclass=SigletonMeta):
     #--- query ----------------------------------------------------------
     def query(self, parameters: list | dict) -> dict:
         """Query questions by AND-conjoined conditions.
-
-        See services/storage/memory.py (InMemoryRepository.query) and
-        services/question_schema.py for the condition/attribute contract.
-        Returns {question_id: question}.
         """
         return self.repository.query(parameters)

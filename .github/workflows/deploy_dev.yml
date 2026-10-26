@@ -75,11 +75,11 @@ jobs:
             $COMPOSE build api
 
             echo "Applying database migrations..."
-            $COMPOSE run --rm --no-deps api \
+            $COMPOSE run -T --rm --no-deps api \
               python -m services.storage.scripts.migration
-            $COMPOSE run --rm --no-deps api \
+            $COMPOSE run -T --rm --no-deps api \
               python -m services.storage.scripts.indexes
-            $COMPOSE run --rm --no-deps api \
+            $COMPOSE run -T --rm --no-deps api \
               python -m services.storage.scripts.procedures
 
             echo "Starting API container..."

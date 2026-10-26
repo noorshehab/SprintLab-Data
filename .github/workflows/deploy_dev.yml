@@ -18,9 +18,8 @@ env:
   DB_USER: ${{ vars.DB_USER }}
   DB_PASSWORD: ${{ vars.DB_PASSWORD }}
   DB_NAME: ${{ vars.DEV_DB_NAME }}
-  API_BASE_URL: ${{ vars.API_BASE_URL }}
   REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-  DEPLOY_PATH: ${{ vars.DEPLOY_PATH_DEV}}
+  LETSENCRYPT_EMAIL: ${{ vars.LETSENCRYPT_EMAIL }}
 
 jobs:
   deploy:
@@ -34,13 +33,15 @@ jobs:
           username: ${{ vars.VM_USER || 'ubuntu' }}
           key: ${{ secrets.SSH_KEY_VM }}
           command_timeout: 30m
-          envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL
+          envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL,LETSENCRYPT_EMAIL
           script: |
             set -eu
 
             HOME="${HOME:-/home/ubuntu}"
             BRANCH="${GITHUB_REF_NAME:-development}"
             DEPLOY_PATH="$HOME/SprintLabData-dev"
+            DOMAIN="learning-intelligence-staging-api.noxed.tech"
+            LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@noxed.tech}"
 
             IMAGE="sprintlab-api:dev"
             CONTAINER="sprintlab-api-dev"
@@ -80,20 +81,146 @@ jobs:
             mkdir -p logs
             docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
             docker run -d --name "$CONTAINER" --restart unless-stopped \
-              --env-file .env -p 8000:8000 \
+              --env-file .env -p 127.0.0.1:8000:8000 \
               -v "$PWD/logs:/app/logs" "$IMAGE"
 
+            healthy=0
             for _ in $(seq 1 30); do
               if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
-                echo "API health check passed."
-                exit 0
+                healthy=1
+                break
               fi
               sleep 1
             done
 
-            echo "API health check failed; container logs:" >&2
-            docker logs --tail=100 "$CONTAINER" >&2 || true
-            exit 1
+            if [ "$healthy" -ne 1 ]; then
+              echo "API health check failed; container logs:" >&2
+              docker logs --tail=100 "$CONTAINER" >&2 || true
+              exit 1
+            fi
+            echo "API health check passed."
+
+            echo "Configuring nginx reverse proxy for $DOMAIN..."
+            if ! sudo -n true 2>/dev/null; then
+              echo "Passwordless sudo is required to configure nginx and certbot." >&2
+              exit 1
+            fi
+
+            if ! command -v nginx >/dev/null 2>&1; then
+              sudo env DEBIAN_FRONTEND=noninteractive apt-get update
+              sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+            fi
+
+            if ! command -v certbot >/dev/null 2>&1; then
+              sudo env DEBIAN_FRONTEND=noninteractive apt-get update
+              sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y certbot
+            fi
+
+            sudo mkdir -p /var/www/certbot
+            sudo chmod 755 /var/www/certbot
+            sudo rm -f /etc/nginx/sites-enabled/default
+
+            sudo tee "/etc/nginx/sites-available/$DOMAIN" >/dev/null <<NGINX
+            server {
+                listen 80;
+                listen [::]:80;
+                server_name $DOMAIN;
+
+                location /.well-known/acme-challenge/ {
+                    root /var/www/certbot;
+                }
+
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header X-Forwarded-Host \$host;
+                    proxy_set_header X-Forwarded-Port \$server_port;
+                    proxy_read_timeout 300s;
+                    proxy_send_timeout 300s;
+                }
+            }
+            NGINX
+
+            sudo ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
+            sudo nginx -t
+            sudo systemctl enable nginx >/dev/null 2>&1 || true
+            sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
+
+            echo "Requesting/renewing Let's Encrypt certificate..."
+            sudo certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" \
+              --non-interactive --agree-tos --email "$LETSENCRYPT_EMAIL" \
+              --keep-until-expiring
+
+            if ! sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
+              echo "Let's Encrypt certificate was not created for $DOMAIN." >&2
+              exit 1
+            fi
+
+            echo "Enabling HTTPS nginx config..."
+            sudo tee "/etc/nginx/sites-available/$DOMAIN" >/dev/null <<NGINX
+            server {
+                listen 80;
+                listen [::]:80;
+                server_name $DOMAIN;
+
+                location /.well-known/acme-challenge/ {
+                    root /var/www/certbot;
+                }
+
+                location / {
+                    return 301 https://\$host\$request_uri;
+                }
+            }
+
+            server {
+                listen 443 ssl http2;
+                listen [::]:443 ssl http2;
+                server_name $DOMAIN;
+
+                ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+                ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+                ssl_protocols TLSv1.2 TLSv1.3;
+                ssl_prefer_server_ciphers off;
+                ssl_session_cache shared:SSL:10m;
+                ssl_session_timeout 1d;
+
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header X-Forwarded-Host \$host;
+                    proxy_set_header X-Forwarded-Port \$server_port;
+                    proxy_read_timeout 300s;
+                    proxy_send_timeout 300s;
+                }
+            }
+            NGINX
+
+            sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+            printf '#!/bin/sh\nsystemctl reload nginx\n' | \
+              sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null
+            sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+            if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active"; then
+              sudo ufw allow 'Nginx Full' >/dev/null || true
+            fi
+
+            sudo nginx -t
+            sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
+
+            if curl -fsS --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/health" >/dev/null; then
+              echo "HTTPS health check passed for https://$DOMAIN"
+            else
+              echo "HTTPS health check failed for https://$DOMAIN" >&2
+              exit 1
+            fi
 
   test:
     name: Server tests (stub)
@@ -104,7 +231,7 @@ jobs:
 
       - name: Run tests against deployed server
         env:
-          API_BASE_URL: ${{ vars.API_BASE_URL  }}
+          API_BASE_URL: ${{ vars.DEV_API_BASE_URL || vars.API_BASE_URL || 'https://learning-intelligence-staging-api.noxed.tech' }}
         run: |
           echo "Testing against $API_BASE_URL"
           echo "Test step is a stub. Replace with your test script."

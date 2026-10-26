@@ -42,14 +42,8 @@ jobs:
             BRANCH="${GITHUB_REF_NAME:-development}"
             DEPLOY_PATH="$HOME/SprintLabData-dev"
 
-            if command -v docker-compose >/dev/null 2>&1; then
-              COMPOSE="docker-compose"
-            elif docker compose version >/dev/null 2>&1; then
-              COMPOSE="docker compose"
-            else
-              echo "Neither docker-compose nor docker compose is available" >&2
-              exit 1
-            fi
+            IMAGE="sprintlab-api:dev"
+            CONTAINER="sprintlab-api-dev"
 
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               git clone "$REPO_URL" "$DEPLOY_PATH"
@@ -72,18 +66,22 @@ jobs:
             } > .env
 
             echo "Building application image..."
-            $COMPOSE build api
+            docker build -t "$IMAGE" .
 
             echo "Applying database migrations..."
-            $COMPOSE run -T --rm --no-deps api \
+            docker run --rm --env-file .env "$IMAGE" \
               python -m services.storage.scripts.migration
-            $COMPOSE run -T --rm --no-deps api \
+            docker run --rm --env-file .env "$IMAGE" \
               python -m services.storage.scripts.indexes
-            $COMPOSE run -T --rm --no-deps api \
+            docker run --rm --env-file .env "$IMAGE" \
               python -m services.storage.scripts.procedures
 
             echo "Starting API container..."
-            $COMPOSE up -d --remove-orphans api
+            mkdir -p logs
+            docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+            docker run -d --name "$CONTAINER" --restart unless-stopped \
+              --env-file .env -p 8000:8000 \
+              -v "$PWD/logs:/app/logs" "$IMAGE"
 
             for _ in $(seq 1 30); do
               if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
@@ -94,7 +92,7 @@ jobs:
             done
 
             echo "API health check failed; container logs:" >&2
-            $COMPOSE logs --tail=100 api >&2 || true
+            docker logs --tail=100 "$CONTAINER" >&2 || true
             exit 1
 
   test:

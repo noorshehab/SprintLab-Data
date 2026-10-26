@@ -34,12 +34,13 @@ jobs:
           username: ${{ vars.VM_USER || 'ubuntu' }}
           key: ${{ secrets.SSH_KEY_VM }}
           command_timeout: 30m
-          envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL,DEPLOY_PATH
+          envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL
           script: |
             set -eu
 
+            HOME="${HOME:-/home/ubuntu}"
             BRANCH="${GITHUB_REF_NAME:-development}"
-            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/SprintLabData-$BRANCH}"
+            DEPLOY_PATH="$HOME/SprintLabData-dev"
 
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               git clone "$REPO_URL" "$DEPLOY_PATH"

@@ -63,7 +63,7 @@ jobs:
             } > .env
 
             echo "Building application image..."
-            docker compose build --pull api
+            docker compose build api
 
             echo "Applying database migrations..."
             docker compose run --rm --no-deps api \

@@ -136,6 +136,25 @@ class InMemoryRepository(DataRepository):
         stu = self.students.get(student_id)
         return list(stu.get_responses()) if stu else []
 
+    def get_response_records(self, student_id: str) -> list[dict]:
+        records = []
+        for response in self.get_responses(student_id):
+            match_id, date, q_id, value, error, timeout, response_time, stress, hints, atag = response
+            records.append({
+                'matchId': match_id,
+                'date': date,
+                'questionId': q_id,
+                'optionId': value if isinstance(value, str) else None,
+                'response': value,
+                'error': bool(error),
+                'timeout': bool(timeout),
+                'responseTimeSeconds': float(response_time or 0.0),
+                'stressTrigger': int(stress or 0),
+                'hintsUsed': int(hints or 0),
+                'answerTag': atag,
+            })
+        return records
+
     def count_responses(self, student_id: str) -> int:
         stu = self.students.get(student_id)
         return len(stu.get_responses()) if stu else 0

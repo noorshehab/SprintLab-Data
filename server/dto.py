@@ -59,19 +59,37 @@ def match_questions_dto(questions: list[dict]) -> list[dict[str, Any]]:
              'unit': item['unit']} for item in questions]
 
 
-def student_dto(s: Any) -> dict[str, Any]:
+def student_dto(s: Any, data_service: Any) -> dict[str, Any]:
     return {
         'studentId': s.id,
-        'priors': s.get_priors(),
-        'contentGaps': s.get_content_gaps(),
-        'diagnoses': s.get_diagnoses(),
-        'treatmentPlan': _plan_dto(s),
-        'responsesCount': len(s.get_responses()),
+        'priors': data_service.get_priors(s.id),
+        'contentGaps': data_service.get_content_gaps(s.id),
+        'diagnoses': data_service.get_diagnoses(s.id),
+        'treatmentPlan': data_service.get_treatment_plan(s.id) or {},
+        'responsesCount': data_service.count_responses(s.id),
     }
 
 
-def _plan_dto(s: Any) -> dict[str, Any]:
-    stored = s.get_treatment_plan().get('treatment_plan')
-    if not stored:
-        return {}
-    return {'updatedAt': stored[0], 'constraints': stored[1]}
+def response_dto(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'matchId': record['matchId'],
+        'date': record.get('date'),
+        'questionId': record['questionId'],
+        'optionId': record.get('optionId'),
+        'response': record.get('response'),
+        'error': bool(record.get('error')),
+        'timeout': bool(record.get('timeout')),
+        'responseTimeSeconds': float(record.get('responseTimeSeconds') or 0.0),
+        'stressTrigger': int(record.get('stressTrigger') or 0),
+        'hintsUsed': int(record.get('hintsUsed') or 0),
+        'answerTag': record.get('answerTag'),
+    }
+
+
+def hint_dto(hint: Any) -> dict[str, Any]:
+    out = {'hintId': hint.hint_id, 'hintText': hint.get_text()}
+    for field in ('topic', 'content_gap_type', 'diagnosis', 'hint_type',
+                  'question_id', 'q_id', 'hint_order'):
+        if hasattr(hint, field):
+            out[field] = getattr(hint, field)
+    return out

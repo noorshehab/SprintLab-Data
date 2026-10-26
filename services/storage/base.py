@@ -10,6 +10,7 @@ of the interface, not raw row dicts.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import Any
 
 from services.Entities import Question, SkillCluster, Student, PreHint, PostHint, PlayHint, Unit, Lesson, LearningObjective
 
@@ -90,6 +91,10 @@ class DataRepository(ABC):
     @abstractmethod
     def get_responses(self, student_id: str) -> list[tuple]:
         """Return response tuples in chronological order."""
+
+    @abstractmethod
+    def get_response_records(self, student_id: str) -> list[dict[str, Any]]:
+        """Return response rows with the persisted schema fields."""
 
     @abstractmethod
     def count_responses(self, student_id: str) -> int: ...

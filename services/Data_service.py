@@ -154,6 +154,9 @@ class Data_Service(metaclass=SigletonMeta):
     def get_responses(self, student_id: str) -> list[tuple]:
         return self.repository.get_responses(student_id)
 
+    def get_response_records(self, student_id: str) -> list[dict]:
+        return self.repository.get_response_records(student_id)
+
     def count_responses(self, student_id: str) -> int:
         return self.repository.count_responses(student_id)
 

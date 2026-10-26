@@ -8,20 +8,23 @@ Run:
 """
 from __future__ import annotations
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 
 from server import dto, pipelines, reprocessing
 from server.schemas import (
-    AnswerAccepted, BatchResult, CurriculumCreated, DiagnosticsAccepted, DiagnosticsRun,
-    DiagnosticsStatus, MatchAnswer, MatchCompleteResult, MatchCreate,
-    MatchCreated, QuestionBatch, QuestionsOut, QuestionsQuery,
-    StudentCreated, UnitIn, LessonIn, LearningObjectiveIn, SkillIn,
+    AnswerAccepted, BatchResult, ContentGapsOut, CurriculumCreated,
+    DiagnosesHistoryOut, DiagnosesOut, DiagnosticsAccepted, DiagnosticsRun,
+    DiagnosticsStatus, HintsOut, MatchAnswer, MatchCompleteResult, MatchCreate,
+    MatchCreated, PriorsHistoryOut, PriorsOut, QuestionBatch, QuestionQueryIn,
+    QuestionsOut, QuestionsQuery, ResponseCountOut, ResponsesOut, SkillIn,
+    StudentCreated, StudentIn, TreatmentPlanIn, TreatmentPlanOut,
+    UnitIn, LessonIn, LearningObjectiveIn,
 )
 from services.Data_service import Data_Service
 from services.Diagnosis_service import Diagnosis_service
-from services.Entities import student as StudentEntity
 from services.Treatment_service import Treatment_Service
 from services.behavioral_diagnosis.behavioral_diagnosis_engine import (
     behavioral_diagnosis_engine,
@@ -126,7 +129,8 @@ def run_diagnostics(body: DiagnosticsRun, background: BackgroundTasks):
 
     def _run():
         try:
-            result = pipelines.run_diagnostics(rt, body.studentId, body.Answers)
+            result = pipelines.run_diagnostics(
+                rt, body.studentId, body.Answers, body.matchId)
             rt['job_store'].finish(job['jobId'], result)
         except Exception as exc:  # surface failure through the job record
             rt['job_store'].fail(job['jobId'], str(exc))
@@ -166,11 +170,13 @@ def append_answer(match_id: str, body: MatchAnswer):
     updated = rt['match_store'].append_answer(match_id, {
         'questionId': body.questionId,
         'response': body.response,
+        'optionId': body.optionId,
         'responseTimeSeconds': body.responseTimeSeconds,
         'stressTrigger': body.stressTrigger,
         'timeOut': body.timeout,
         'hintsUsed': body.hintsUsed,
         'date': body.date,
+        'answerTag': body.answerTag,
     })
     if updated is None:
         raise HTTPException(404, f'match {match_id} not found')
@@ -230,7 +236,7 @@ def insert_questions(body: QuestionBatch, background: BackgroundTasks):
 #--- students -----------------------------------------------------------
 
 @app.post('/students', status_code=201, response_model=StudentCreated)
-def create_student(body: StudentCreated):
+def create_student(body: StudentIn):
     rt = _rt()
     rt['data_service'].add_student(body.studentId)
     return {'studentId': body.studentId}
@@ -243,6 +249,152 @@ def get_student(student_id: str):
     if s is None:
         raise HTTPException(404, f'student {student_id} not found')
     return dto.student_dto(s, rt['data_service'])
+
+
+@app.get('/students/{student_id}/responses', response_model=ResponsesOut)
+def get_student_responses(student_id: str):
+    rt = _rt()
+    records = rt['data_service'].get_response_records(student_id)
+    return {'responses': [dto.response_dto(r) for r in records]}
+
+
+@app.get('/students/{student_id}/responses/count', response_model=ResponseCountOut)
+def get_student_response_count(student_id: str):
+    rt = _rt()
+    return {'count': rt['data_service'].count_responses(student_id)}
+
+
+@app.get('/students/{student_id}/priors', response_model=PriorsOut)
+def get_student_priors(student_id: str):
+    rt = _rt()
+    return {'priors': rt['data_service'].get_priors(student_id)}
+
+
+@app.get('/students/{student_id}/priors/history', response_model=PriorsHistoryOut)
+def get_student_priors_history(student_id: str, window: int = 2):
+    rt = _rt()
+    raw = rt['data_service'].get_priors_history(student_id, window)
+    history = [{'timestamp': str(ts), 'priors': priors}
+               for ts, priors in sorted(raw.items(), key=lambda item: str(item[0]))]
+    return {'history': history}
+
+
+@app.get('/students/{student_id}/diagnoses', response_model=DiagnosesOut)
+def get_student_diagnoses(student_id: str):
+    rt = _rt()
+    return {'diagnoses': rt['data_service'].get_diagnoses(student_id)}
+
+
+@app.get('/students/{student_id}/diagnoses/history', response_model=DiagnosesHistoryOut)
+def get_student_diagnoses_history(student_id: str, window: int = 2):
+    rt = _rt()
+    history = rt['data_service'].get_diagnoses_history(student_id, window)
+    return {'history': history}
+
+
+@app.get('/students/{student_id}/content-gaps', response_model=ContentGapsOut)
+def get_student_content_gaps(student_id: str):
+    rt = _rt()
+    return {'contentGaps': rt['data_service'].get_content_gaps(student_id)}
+
+
+@app.get('/students/{student_id}/treatment-plan', response_model=TreatmentPlanOut)
+def get_student_treatment_plan(student_id: str):
+    rt = _rt()
+    return {'treatmentPlan': rt['data_service'].get_treatment_plan(student_id) or {}}
+
+
+@app.put('/students/{student_id}/treatment-plan', response_model=TreatmentPlanOut)
+def put_student_treatment_plan(student_id: str, body: TreatmentPlanIn):
+    rt = _rt()
+    if rt['data_service'].get_student(student_id) is None:
+        raise HTTPException(404, f'student {student_id} not found')
+    rt['data_service'].replace_treatment_plan(
+        student_id, datetime.now().isoformat(), body.treatmentPlan)
+    return {'treatmentPlan': rt['data_service'].get_treatment_plan(student_id) or {}}
+
+
+@app.get('/skills/{skill_id}')
+def get_skill(skill_id: str):
+    rt = _rt()
+    skill = rt['data_service'].get_skill(skill_id)
+    if skill is None:
+        raise HTTPException(404, f'skill {skill_id} not found')
+    return {
+        'skillClusterId': skill.skill_cluster_id,
+        'skillClusterVersionId': getattr(skill, 'skill_cluster_version_id', None),
+        'content': getattr(skill, 'content', None),
+        'similarSkills': skill.get_similar(),
+    }
+
+
+@app.post('/questions/query', response_model=QuestionsOut)
+def query_questions(body: QuestionQueryIn):
+    rt = _rt()
+    result = rt['data_service'].query(body.conditions)
+    return {'Questions': [dto.question_dto(q) for q in result.values()]}
+
+
+@app.get('/hints/pre', response_model=HintsOut)
+def get_pre_hints(topic: Optional[str] = None,
+                  content_gap_type: Optional[str] = None,
+                  diagnosis: Optional[str] = None):
+    rt = _rt()
+    ds = rt['data_service']
+    if content_gap_type is not None and topic is not None:
+        hints = ds.get_pre_hints_by_content_gap_type(topic, content_gap_type)
+    elif diagnosis is not None:
+        hints = ds.get_pre_hints_by_diagnosis(diagnosis)
+    elif topic is not None:
+        hints = ds.get_pre_hints_by_topic(topic)
+    else:
+        hints = ds.list_pre_hints()
+    return {'hints': [dto.hint_dto(h) for h in hints]}
+
+
+@app.get('/hints/pre/{hint_id}')
+def get_pre_hint(hint_id: str):
+    rt = _rt()
+    hint = rt['data_service'].get_pre_hint(hint_id)
+    if hint is None:
+        raise HTTPException(404, f'pre hint {hint_id} not found')
+    return dto.hint_dto(hint)
+
+
+@app.get('/hints/post', response_model=HintsOut)
+def get_post_hints(question_id: Optional[str] = None):
+    rt = _rt()
+    ds = rt['data_service']
+    hints = (ds.get_post_hints_by_question(question_id)
+             if question_id is not None else ds.list_post_hints())
+    return {'hints': [dto.hint_dto(h) for h in hints]}
+
+
+@app.get('/hints/post/{hint_id}')
+def get_post_hint(hint_id: str):
+    rt = _rt()
+    hint = rt['data_service'].get_post_hint(hint_id)
+    if hint is None:
+        raise HTTPException(404, f'post hint {hint_id} not found')
+    return dto.hint_dto(hint)
+
+
+@app.get('/hints/play', response_model=HintsOut)
+def get_play_hints(question_id: Optional[str] = None):
+    rt = _rt()
+    ds = rt['data_service']
+    hints = (ds.get_play_hints_by_question(question_id)
+             if question_id is not None else ds.list_play_hints())
+    return {'hints': [dto.hint_dto(h) for h in hints]}
+
+
+@app.get('/hints/play/{hint_id}')
+def get_play_hint(hint_id: str):
+    rt = _rt()
+    hint = rt['data_service'].get_play_hint(hint_id)
+    if hint is None:
+        raise HTTPException(404, f'play hint {hint_id} not found')
+    return dto.hint_dto(hint)
 
 
 @app.get('/health')

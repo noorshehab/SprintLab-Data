@@ -26,21 +26,48 @@ _DIAG_KEYS = {
 }
 
 
+def _answer_tuple(answer, match_id: str, date: str = '') -> tuple:
+    """Map an API answer onto the Response-table tuple contract.
+
+    Prefer the persisted OptionID when supplied; otherwise pass the raw
+    response through so Diagnosis_service can resolve/score it.
+    """
+    option_id = getattr(answer, 'optionId', None)
+    response = option_id if option_id is not None else getattr(answer, 'response', None)
+    return (match_id,
+            getattr(answer, 'date', None) or date,
+            answer.questionId,
+            response,
+            None,  # error calculated by process_responses
+            bool(getattr(answer, 'timeout', False)),
+            getattr(answer, 'responseTimeSeconds', 0.0),
+            getattr(answer, 'stressTrigger', 0),
+            getattr(answer, 'hintsUsed', 0),
+            getattr(answer, 'answerTag', None))
+
+
 def _answer_tuples(answers, match_id: str, date: str = '') -> list[tuple]:
-    return [(match_id,
-             date,
-             a.questionId,
-             a.response,
-             None,  # error calculated by process_responses
-             False,  # timeout (not available in diagnostics)
-             a.responseTimeSeconds,
-             a.stressTrigger,
-             0,  # hints_used (not available in diagnostics)
-             a.answerTag)
-            for a in answers]
+    return [_answer_tuple(a, match_id, date) for a in answers]
 
 
-def run_diagnostics(runtime, student_id: str, answers) -> dict[str, Any]:
+def _dict_answer_tuple(answer: dict, match_id: str) -> tuple:
+    response = answer.get('optionId')
+    if response is None:
+        response = answer.get('response')
+    return (match_id,
+            answer.get('date') or '',
+            answer['questionId'],
+            response,
+            None,
+            bool(answer.get('timeOut', False)),
+            answer.get('responseTimeSeconds', 0.0),
+            answer.get('stressTrigger', 0),
+            answer.get('hintsUsed', 0),
+            answer.get('answerTag'))
+
+
+def run_diagnostics(runtime, student_id: str, answers,
+                    match_id: str | None = None) -> dict[str, Any]:
     """Diagnostics job body: absorb answers, run KT + BD + treatment.
 
     Bypasses the incremental response-count gates on purpose: an API
@@ -50,17 +77,17 @@ def run_diagnostics(runtime, student_id: str, answers) -> dict[str, Any]:
     diag = runtime['diagnosis_service']
     kt = diag.KT_engine
 
-    match_id = f"diagnostics-{uuid4()}"
+    match_id = match_id or f"diagnostics-{uuid4()}"
     data.create_match(match_id, 'diagnostics', 1)
 
     old_prior_count = len(data.get_priors(student_id))
     responses = _answer_tuples(answers, match_id)
-
-    diag.add_student_response(student_id, responses)
+    processed = diag.process_responses(student_id, responses)
 
     kt.calibrate_priors(student_id)
-    kt.update_student_priors(student_id, [a.questionId for a in answers],
-                             [_correctness(diag, a.questionId, a.response) for a in answers])
+    kt.update_student_priors(student_id,
+                             [r[2] for r in processed],
+                             [0 if r[4] else 1 for r in processed])
     kt.update_content_gaps(student_id)
 
     bd_result = diag.BD_engine.diagnose_student(student_id)
@@ -95,23 +122,14 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
     student_id = match['studentId']
     match_id = match['matchId']
 
-    q_ids = [a['questionId'] for a in match['answers']]
-    responses = [(match_id,
-                  a.get('date', ''),
-                  a['questionId'],
-                  a['response'],
-                  None,  # error calculated by process_responses
-                  a.get('timeOut', False),
-                  a.get('responseTimeSeconds'),
-                  a.get('stressTrigger'),
-                  a.get('hintsUsed', 0),
-                  a.get('answerTag')) for a in match['answers']]
+    responses = [_dict_answer_tuple(a, match_id) for a in match['answers']]
 
     priors_before = dict(data.get_priors(student_id))
 
-    diag.add_student_response(student_id, responses)
-    kt.update_student_priors(student_id, q_ids,
-                             [_correctness(diag, r[2], r[3]) for r in responses])
+    processed = diag.process_responses(student_id, responses)
+    kt.update_student_priors(student_id,
+                             [r[2] for r in processed],
+                             [0 if r[4] else 1 for r in processed])
     kt.update_content_gaps(student_id)
 
     bd_result = diag.BD_engine.diagnose_student(student_id)
@@ -147,15 +165,6 @@ def complete_match(runtime, match: dict) -> dict[str, Any]:
         'behavioralScores': behavioral_scores,
         'updatedTreatmentPlan': constraints,
     }
-
-
-def _correctness(diag, q_id: str, response) -> int:
-    question = diag.Data_service.get_question(q_id)
-    if isinstance(question, list):
-        question = question[0] if question else None
-    if question is None:
-        return 1 if bool(response) else 0
-    return 0 if diag._calculate_error(question, response) else 1
 
 
 def _is_nan(value) -> bool:

@@ -384,6 +384,7 @@ class SqlAlchemyRepository(DataRepository):
                 learning_objective_id=row["LearningObjectiveID"],
                 skill_cluster_content=row["SkillClusterContent"] or "",
                 similar_skills=sim_ids,
+                skill_cluster_version_id=row["SkillClusterVersionID"],
             )
 
     # --- student state (Stored Procedures & History) --------------------
@@ -458,6 +459,32 @@ class SqlAlchemyRepository(DataRepository):
                 self._atag_for_response(row["QuestionID"], option_id, error),
             ))
         return out
+
+    def get_response_records(self, student_id: str) -> list[dict[str, Any]]:
+        sql, params = self.query_builder.build_get_responses(student_id)
+        with self._get_session() as session:
+            rows = session.execute(sql, params).mappings().all()
+        records = []
+        for row in rows:
+            error = bool(row["Error"])
+            option_id = row["OptionID"]
+            date = row["Date"]
+            if hasattr(date, "isoformat"):
+                date = date.isoformat()
+            records.append({
+                "matchId": row["MatchID"],
+                "date": date or "",
+                "questionId": row["QuestionID"],
+                "optionId": option_id,
+                "response": option_id,
+                "error": error,
+                "timeout": bool(row["TimeOut"]),
+                "responseTimeSeconds": float(row["ResponseTime"] or 0.0),
+                "stressTrigger": row["StressTriggers"] or 0,
+                "hintsUsed": row["HintsUsed"] or 0,
+                "answerTag": self._atag_for_response(row["QuestionID"], option_id, error),
+            })
+        return records
 
     def count_responses(self, student_id: str) -> int:
         sql, params = self.query_builder.build_count_responses(student_id)

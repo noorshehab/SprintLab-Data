@@ -167,12 +167,7 @@ class Diagnosis_service(Mediator,Publisher):
             responses: List of 10-tuples:
                 (match_id, date, q_id, response, error, timeout, time, stress_triggers, hints_used, atag)
         """
-        new_responses = []
-        for response_data in responses:
-            processed = self._process_response(response_data)
-            new_responses.append(processed)
-
-        self.Data_service.update_responses(student_id, new_responses)
+        new_responses = self.process_responses(student_id, responses)
 
         n_responses = self.Data_service.count_responses(student_id)
         q_ids = [r[2] for r in new_responses]  # q_id is at index 2
@@ -209,6 +204,12 @@ class Diagnosis_service(Mediator,Publisher):
             self.notify('priors_updated', {'student_id': student_id, 'q_ids': q_ids})
 
         return f"Added {len(new_responses)} responses to {student_id}"
+
+    def process_responses(self, student_id: str, responses: list[tuple]) -> list[tuple]:
+        """Validate/normalize responses and persist them through Data_Service."""
+        processed = [self._process_response(response) for response in responses]
+        self.Data_service.update_responses(student_id, processed)
+        return processed
 
     def _process_response(self, response_data: tuple) -> tuple:
         """Process a single response, calculating error and atag if not already set.

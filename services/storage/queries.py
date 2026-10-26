@@ -178,7 +178,8 @@ class QueryBuilder:
 
     def build_get_skill(self, skill_id: str) -> tuple[TextClause, dict[str, Any]]:
         sql = text("""
-            SELECT SkillClusterID, LessonID, UnitID, LearningObjectiveID, SkillClusterContent
+            SELECT SkillClusterVersionID, SkillClusterID, LessonID, UnitID,
+                   LearningObjectiveID, SkillClusterContent
             FROM SkillCluster
             WHERE SkillClusterID = :skill_id AND Current = TRUE
             ORDER BY ValidFrom DESC LIMIT 1;
@@ -187,7 +188,8 @@ class QueryBuilder:
 
     def build_get_skills_by_ids(self, skill_ids: list[str]) -> tuple[TextClause, dict[str, Any]]:
         sql = text("""
-            SELECT SkillClusterID, LessonID, UnitID, LearningObjectiveID, SkillClusterContent
+            SELECT SkillClusterVersionID, SkillClusterID, LessonID, UnitID,
+                   LearningObjectiveID, SkillClusterContent
             FROM SkillCluster
             WHERE Current = TRUE AND SkillClusterID IN :skill_ids
             ORDER BY ValidFrom DESC;

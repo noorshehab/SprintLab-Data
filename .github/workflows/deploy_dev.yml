@@ -1,0 +1,105 @@
+name: Deploy SprintLab
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sprintlab-deploy
+  cancel-in-progress: false
+
+env:
+  DB_HOST: ${{ vars.DB_HOST }}
+  DB_PORT: ${{ vars.DB_PORT || '3306' }}
+  DB_USER: ${{ vars.DB_USER }}
+  DB_PASSWORD: ${{ vars.DB_PASSWORD }}
+  DB_NAME: ${{ vars.DEV_DB_NAME }}
+  API_BASE_URL: ${{ vars.API_BASE_URL }}
+  REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+
+jobs:
+  deploy:
+    name: Deploy container 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.DB_HOST }}
+          username: ${{ vars.VM_USER}}
+          key: ${{ secrets.SSH_KEY_VM }}
+          command_timeout: 30m
+          envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL,DEPLOY_PATH
+          script: |
+            set -eu
+
+            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/SprintLabData}"
+
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              git clone "$REPO_URL" "$DEPLOY_PATH"
+            fi
+
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+
+            # .env is gitignored and consumed by both compose and the app.
+            umask 077
+            {
+              printf 'DB_HOST=%s\n' "$DB_HOST"
+              printf 'DB_PORT=%s\n' "$DB_PORT"
+              printf 'DB_USER=%s\n' "$DB_USER"
+              printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
+              printf 'DB_NAME=%s\n' "$DB_NAME"
+              printf 'STORAGE_MODE=mysql\n'
+              printf 'SPRINTLAB_LOG_CONSOLE=1\n'
+            } > .env
+
+            echo "Building application image..."
+            docker compose build --pull api
+
+            echo "Applying database migrations..."
+            docker compose run --rm --no-deps api \
+              python -m services.storage.scripts.migration
+            docker compose run --rm --no-deps api \
+              python -m services.storage.scripts.indexes
+            docker compose run --rm --no-deps api \
+              python -m services.storage.scripts.procedures
+
+            echo "Starting API container..."
+            docker compose up -d --remove-orphans api
+
+            for _ in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+                echo "API health check passed."
+                exit 0
+              fi
+              sleep 1
+            done
+
+            echo "API health check failed; container logs:" >&2
+            docker compose logs --tail=100 api >&2 || true
+            exit 1
+
+  test:
+    name: Server tests (stub)
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO: replace this stub with the test script you want to use.
+      # It runs after deployment and can make requests to the live server.
+      - name: Run tests against deployed server
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          echo "Testing against $API_BASE_URL"
+          echo "Test step is a stub. Replace with your test script."
+          # ./scripts/test.sh

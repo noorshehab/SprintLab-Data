@@ -95,8 +95,10 @@ class SkillCluster(Base):
         learning_objective_id: str | None = None,
         skill_cluster_content: str = "",
         similar_skills: list[str] | None = None,
+        skill_cluster_version_id: str = "",
     ) -> None:
         self.skill_cluster_id = skill_cluster_id
+        self.skill_cluster_version_id = skill_cluster_version_id
         self.id = skill_cluster_id
         self.lesson_id = lesson_id
         self.unit_id = unit_id

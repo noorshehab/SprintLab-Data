@@ -1,25 +1,21 @@
-import os
-import pymysql
-from dotenv import load_dotenv
+import argparse
 
-load_dotenv()
+try:
+    from .db_config import DBConfig, add_arguments, config_from_namespace
+except ImportError:  # direct script execution
+    from db_config import DBConfig, add_arguments, config_from_namespace
 
-def create_scd2_stored_procedures():
-    host = os.getenv("DB_HOST")
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
-    port = int(os.getenv("DB_PORT"))
-    db_name = os.getenv("DB_NAME")
 
-    print(f"Connecting to MySQL server at {host}:{port}/{db_name}...")
-    conn = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        port=port,
-        database=db_name,
-        autocommit=True,
-    )
+def create_scd2_stored_procedures(host: str | None = None, user: str | None = None,
+                                  password: str | None = None,
+                                  port: int | str | None = None,
+                                  db_name: str | None = None):
+    cfg = DBConfig.from_values(
+        host=host, user=user, password=password, port=port, db_name=db_name)
+    db_name = cfg.db_name
+
+    print(f"Connecting to MySQL server at {cfg.host}:{cfg.port}/{db_name}...")
+    conn = cfg.connect()
 
     procedures = {
         # 1. Update Unit Version (SCD Type 2)
@@ -206,22 +202,16 @@ def create_scd2_stored_procedures():
     finally:
         conn.close()
 
-def create_student_scd_procedures():
-    host = os.getenv("DB_HOST", "localhost")
-    user = os.getenv("DB_USER", "root")
-    password = os.getenv("DB_PASSWORD", "password")
-    port = int(os.getenv("DB_PORT", "3306"))
-    db_name = os.getenv("DB_NAME", "sprintlab_db")
+def create_student_scd_procedures(host: str | None = None, user: str | None = None,
+                                  password: str | None = None,
+                                  port: int | str | None = None,
+                                  db_name: str | None = None):
+    cfg = DBConfig.from_values(
+        host=host, user=user, password=password, port=port, db_name=db_name)
+    db_name = cfg.db_name
 
-    print(f"Connecting to MySQL at {host}:{port}/{db_name}...")
-    conn = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        port=port,
-        database=db_name,
-        autocommit=True
-    )
+    print(f"Connecting to MySQL at {cfg.host}:{cfg.port}/{db_name}...")
+    conn = cfg.connect()
 
     procedures = {
         # -------------------------------------------------------------
@@ -323,6 +313,13 @@ def create_student_scd_procedures():
     finally:
         conn.close()
 
+def main(argv=None):
+    parser = add_arguments(argparse.ArgumentParser(description="Create SprintLab stored procedures"))
+    args = parser.parse_args(argv)
+    config = vars(config_from_namespace(args))
+    create_scd2_stored_procedures(**config)
+    create_student_scd_procedures(**config)
+
+
 if __name__ == "__main__":
-    create_scd2_stored_procedures()
-    create_student_scd_procedures()
+    main()

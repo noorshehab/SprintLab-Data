@@ -1,25 +1,20 @@
-import os
-import pymysql
-from dotenv import load_dotenv
+import argparse
 
-load_dotenv()
+try:
+    from .db_config import DBConfig, add_arguments, config_from_namespace
+except ImportError:  # direct script execution
+    from db_config import DBConfig, add_arguments, config_from_namespace
 
-def run_migration():
-    host = os.getenv("DB_HOST", "localhost")
-    user = os.getenv("DB_USER", "root")
-    password = os.getenv("DB_PASSWORD", "password")
-    port = int(os.getenv("DB_PORT", "3306"))
-    db_name = os.getenv("DB_NAME", "sprintlab_db")
 
-    print(f"Connecting to MySQL server at {host}:{port}...")
-    conn = pymysql.connect(
-        host=host,
-        user=user,
-        password=password,
-        port=port,
-        autocommit=True,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
+def run_migration(host: str | None = None, user: str | None = None,
+                  password: str | None = None, port: int | str | None = None,
+                  db_name: str | None = None):
+    cfg = DBConfig.from_values(
+        host=host, user=user, password=password, port=port, db_name=db_name)
+    db_name = cfg.db_name
+
+    print(f"Connecting to MySQL server at {cfg.host}:{cfg.port}...")
+    conn = cfg.connect(include_database=False)
 
     table_queries = [
         # 1. Curriculum Hierarchy
@@ -348,5 +343,11 @@ def run_migration():
     finally:
         conn.close()
 
+def main(argv=None):
+    parser = add_arguments(argparse.ArgumentParser(description="Create SprintLab MySQL tables"))
+    args = parser.parse_args(argv)
+    run_migration(**vars(config_from_namespace(args)))
+
+
 if __name__ == "__main__":
-    run_migration()
+    main()

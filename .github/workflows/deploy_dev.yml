@@ -42,6 +42,15 @@ jobs:
             BRANCH="${GITHUB_REF_NAME:-development}"
             DEPLOY_PATH="$HOME/SprintLabData-dev"
 
+            if command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE="docker-compose"
+            elif docker compose version >/dev/null 2>&1; then
+              COMPOSE="docker compose"
+            else
+              echo "Neither docker-compose nor docker compose is available" >&2
+              exit 1
+            fi
+
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               git clone "$REPO_URL" "$DEPLOY_PATH"
             fi
@@ -63,18 +72,18 @@ jobs:
             } > .env
 
             echo "Building application image..."
-            docker compose build api
+            $COMPOSE build api
 
             echo "Applying database migrations..."
-            docker compose run --rm --no-deps api \
+            $COMPOSE run --rm --no-deps api \
               python -m services.storage.scripts.migration
-            docker compose run --rm --no-deps api \
+            $COMPOSE run --rm --no-deps api \
               python -m services.storage.scripts.indexes
-            docker compose run --rm --no-deps api \
+            $COMPOSE run --rm --no-deps api \
               python -m services.storage.scripts.procedures
 
             echo "Starting API container..."
-            docker compose up -d --remove-orphans api
+            $COMPOSE up -d --remove-orphans api
 
             for _ in $(seq 1 30); do
               if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
@@ -85,7 +94,7 @@ jobs:
             done
 
             echo "API health check failed; container logs:" >&2
-            docker compose logs --tail=100 api >&2 || true
+            $COMPOSE logs --tail=100 api >&2 || true
             exit 1
 
   test:

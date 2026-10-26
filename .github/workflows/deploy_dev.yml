@@ -1,15 +1,15 @@
-name: Deploy SprintLab
+name: Deploy SprintLab Dev
 
 on:
   push:
-    branches: [main]
+    branches: [dev, development]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sprintlab-deploy
+  group: sprintlab-deploy-dev
   cancel-in-progress: false
 
 env:
@@ -20,36 +20,36 @@ env:
   DB_NAME: ${{ vars.DEV_DB_NAME }}
   API_BASE_URL: ${{ vars.API_BASE_URL }}
   REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-  DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH_DEV}}
 
 jobs:
   deploy:
-    name: Deploy container 
+    name: Deploy dev container
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ vars.DB_HOST }}
-          username: ${{ vars.VM_USER}}
+          username: ${{ vars.VM_USER || 'ubuntu' }}
           key: ${{ secrets.SSH_KEY_VM }}
           command_timeout: 30m
           envs: DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,REPO_URL,DEPLOY_PATH
           script: |
             set -eu
 
-            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/SprintLabData}"
+            BRANCH="${GITHUB_REF_NAME:-development}"
+            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/SprintLabData-$BRANCH}"
 
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               git clone "$REPO_URL" "$DEPLOY_PATH"
             fi
 
             cd "$DEPLOY_PATH"
-            git fetch origin main
-            git checkout main
-            git reset --hard origin/main
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
-            # .env is gitignored and consumed by both compose and the app.
             umask 077
             {
               printf 'DB_HOST=%s\n' "$DB_HOST"
@@ -94,11 +94,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # TODO: replace this stub with the test script you want to use.
-      # It runs after deployment and can make requests to the live server.
       - name: Run tests against deployed server
         env:
-          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL  }}
         run: |
           echo "Testing against $API_BASE_URL"
           echo "Test step is a stub. Replace with your test script."
